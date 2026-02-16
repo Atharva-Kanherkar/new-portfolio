@@ -61,7 +61,6 @@ interface SkillConstellation {
   summary: string;
   color: string;
   nodes: SkillNode[];
-  links: Array<[number, number]>;
 }
 
 const PROJECTS: Project[] = [
@@ -97,7 +96,6 @@ const SKILL_CONSTELLATIONS: SkillConstellation[] = [
       { label: "System Design", x: 55, y: 24, glow: 1.35 },
       { label: "Testing", x: 86, y: 32, glow: 0.9 },
     ],
-    links: [[0, 1], [1, 2], [2, 3], [3, 4], [1, 5], [5, 3], [5, 6], [6, 4]],
   },
   {
     key: "rupa-arc",
@@ -115,7 +113,6 @@ const SKILL_CONSTELLATIONS: SkillConstellation[] = [
       { label: "Accessibility", x: 45, y: 24, glow: 0.95 },
       { label: "Narrative UI", x: 71, y: 27, glow: 0.9 },
     ],
-    links: [[0, 1], [1, 2], [2, 3], [3, 4], [1, 5], [5, 6], [6, 4], [2, 5]],
   },
   {
     key: "prajna-field",
@@ -133,7 +130,6 @@ const SKILL_CONSTELLATIONS: SkillConstellation[] = [
       { label: "Vector DB", x: 61, y: 71, glow: 0.95 },
       { label: "Guardrails", x: 86, y: 33, glow: 0.9 },
     ],
-    links: [[0, 1], [1, 2], [2, 3], [3, 4], [2, 5], [5, 4], [3, 6], [4, 6]],
   },
   {
     key: "tapas-orbit",
@@ -151,7 +147,6 @@ const SKILL_CONSTELLATIONS: SkillConstellation[] = [
       { label: "SRE", x: 70, y: 24, glow: 0.95 },
       { label: "Cost Control", x: 52, y: 23, glow: 0.9 },
     ],
-    links: [[0, 1], [1, 2], [2, 3], [3, 4], [2, 6], [6, 5], [5, 4], [2, 5]],
   },
 ];
 const EXPERIENCES: Experience[] = [
@@ -679,20 +674,141 @@ function makeStarGlint(color: string, sz: number): THREE.CanvasTexture {
   return tex;
 }
 
-function makeNebula(color: string, sz: number): THREE.CanvasTexture {
-  const c = document.createElement("canvas"); c.width = sz; c.height = sz;
-  const x = c.getContext("2d")!, h = sz / 2;
-  for (let i = 0; i < 5; i++) {
-    const ox = h + (Math.random() - 0.5) * sz * 0.4;
-    const oy = h + (Math.random() - 0.5) * sz * 0.4;
-    const r = sz * (0.2 + Math.random() * 0.3);
-    const g = x.createRadialGradient(ox, oy, 0, ox, oy, r);
-    g.addColorStop(0, color + "20");
-    g.addColorStop(0.5, color + "0A");
-    g.addColorStop(1, "transparent");
-    x.fillStyle = g; x.fillRect(0, 0, sz, sz);
+/* ── Fractal noise helpers for nebula (gradient noise + domain warping) ── */
+function _nHash(x: number, y: number): number {
+  let n = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
+  n = n - Math.floor(n);
+  return n;
+}
+function _nHermite(t: number): number { return t * t * (3 - 2 * t); }
+function _gradNoise(px: number, py: number): number {
+  const ix = Math.floor(px), iy = Math.floor(py);
+  const fx = px - ix, fy = py - iy;
+  const ux = _nHermite(fx), uy = _nHermite(fy);
+  // Pseudo-gradient via hash-based offsets
+  const a = _nHash(ix, iy) * 2 - 1;
+  const b = _nHash(ix + 1, iy) * 2 - 1;
+  const c = _nHash(ix, iy + 1) * 2 - 1;
+  const d = _nHash(ix + 1, iy + 1) * 2 - 1;
+  const va = a * fx + _nHash(iy, ix) * fy;
+  const vb = b * (fx - 1) + _nHash(iy, ix + 1) * fy;
+  const vc = c * fx + _nHash(iy + 1, ix) * (fy - 1);
+  const vd = d * (fx - 1) + _nHash(iy + 1, ix + 1) * (fy - 1);
+  return (va + (vb - va) * ux + (vc - va) * uy + (va - vb - vc + vd) * ux * uy) * 0.5 + 0.5;
+}
+function _fbm(x: number, y: number, octaves: number): number {
+  let v = 0, amp = 0.5, freq = 1;
+  for (let i = 0; i < octaves; i++) {
+    v += _gradNoise(x * freq, y * freq) * amp;
+    amp *= 0.5; freq *= 2.05;
   }
-  return new THREE.CanvasTexture(c);
+  // Remap to [0,1]
+  return Math.min(1, Math.max(0, v * 2));
+}
+function _warpedFbm(
+  x: number, y: number, octaves: number, warpAmt: number, levels: number
+): number {
+  if (levels <= 0) return _fbm(x, y, octaves);
+  if (levels === 1) {
+    const wx = _fbm(x + 5.2, y + 1.3, octaves);
+    const wy = _fbm(x + 1.7, y + 9.1, octaves);
+    return _fbm(x + wx * warpAmt, y + wy * warpAmt, octaves);
+  }
+  // 2-level recursive domain warp: f(p + fbm(p + fbm(p)))
+  const q1x = _fbm(x + 5.2, y + 1.3, octaves);
+  const q1y = _fbm(x + 1.7, y + 9.1, octaves);
+  const q2x = _fbm(x + q1x * warpAmt * 0.6 + 13.3, y + q1y * warpAmt * 0.6 + 7.8, octaves);
+  const q2y = _fbm(x + q1x * warpAmt * 0.6 + 2.1, y + q1y * warpAmt * 0.6 + 11.4, octaves);
+  return _fbm(x + q2x * warpAmt, y + q2y * warpAmt, octaves);
+}
+
+type NebulaVariant = 'dense_core' | 'broad_cloud' | 'filament' | 'dust_veil';
+const _nebulaCache = new Map<string, THREE.CanvasTexture>();
+function makeNebulaTexture(
+  color: string, sz: number, seed: number, variant: NebulaVariant
+): THREE.CanvasTexture {
+  const key = `${color}|${sz}|${seed}|${variant}`;
+  const cached = _nebulaCache.get(key);
+  if (cached) return cached;
+
+  const cvs = document.createElement("canvas"); cvs.width = sz; cvs.height = sz;
+  const ctx = cvs.getContext("2d")!;
+  const img = ctx.createImageData(sz, sz);
+  const h = sz / 2;
+  const col = new THREE.Color(color);
+
+  // 3-zone color gradient: reflection blue (center) → emission warm (mid) → oxygen teal (outer)
+  const coreCol = col.clone(); coreCol.offsetHSL(-0.06, 0.08, 0.15);
+  const midCol = col.clone(); midCol.offsetHSL(0.04, -0.02, 0.0);
+  const outerCol = col.clone(); outerCol.offsetHSL(-0.12, 0.04, -0.08);
+
+  // Variant parameters
+  const cfg = {
+    dense_core:  { octaves: 5, warp: 1.6, levels: 2, contrast: 1.4, stretchX: 1.0 },
+    broad_cloud: { octaves: 4, warp: 2.0, levels: 2, contrast: 0.9, stretchX: 1.0 },
+    filament:    { octaves: 6, warp: 1.2, levels: 2, contrast: 1.6, stretchX: 2.4 },
+    dust_veil:   { octaves: 3, warp: 2.5, levels: 1, contrast: 0.7, stretchX: 1.0 },
+  }[variant];
+
+  for (let y = 0; y < sz; y++) {
+    for (let x = 0; x < sz; x++) {
+      const dx = (x - h) / h, dy = (y - h) / h;
+      const dist2 = dx * dx + dy * dy;
+      if (dist2 > 1) {
+        const idx = (y * sz + x) * 4;
+        img.data[idx] = img.data[idx + 1] = img.data[idx + 2] = img.data[idx + 3] = 0;
+        continue;
+      }
+      // Radial envelope
+      const envelope = Math.pow(1 - dist2, variant === 'dust_veil' ? 1.0 : 1.5);
+
+      // Domain-warped noise
+      const nx = (x / sz) * 4 * cfg.stretchX + seed;
+      const ny = (y / sz) * 4 + seed * 0.7;
+      const n1 = _warpedFbm(nx, ny, cfg.octaves, cfg.warp, cfg.levels);
+
+      // Ridged noise dust lanes — sharp dark absorption veins
+      const ridgeX = nx * 1.8 + 31.3, ridgeY = ny * 1.8 + 17.1;
+      const ridgeN = _fbm(ridgeX, ridgeY, 3);
+      const ridge = 1 - Math.pow(Math.abs(ridgeN - 0.5) * 2, 0.4);
+      const dustLane = 1 - ridge * (variant === 'dust_veil' ? 0.7 : 0.35);
+
+      // Apply contrast
+      let density = Math.pow(Math.max(0, n1), 1.0 / cfg.contrast);
+      density = Math.min(1, density * envelope * dustLane);
+
+      // HDR brightening in dense knots
+      if (variant !== 'dust_veil' && density > 0.7) {
+        density = 0.7 + (density - 0.7) * 1.6;
+        density = Math.min(1, density);
+      }
+
+      // 3-zone color gradient
+      const t = Math.sqrt(dist2);
+      let r: number, g: number, b: number;
+      if (t < 0.45) {
+        const lt = t / 0.45;
+        r = coreCol.r + (midCol.r - coreCol.r) * lt;
+        g = coreCol.g + (midCol.g - coreCol.g) * lt;
+        b = coreCol.b + (midCol.b - coreCol.b) * lt;
+      } else {
+        const lt = (t - 0.45) / 0.55;
+        r = midCol.r + (outerCol.r - midCol.r) * lt;
+        g = midCol.g + (outerCol.g - midCol.g) * lt;
+        b = midCol.b + (outerCol.b - midCol.b) * lt;
+      }
+
+      const idx = (y * sz + x) * 4;
+      img.data[idx]     = Math.round(Math.min(255, r * 255));
+      img.data[idx + 1] = Math.round(Math.min(255, g * 255));
+      img.data[idx + 2] = Math.round(Math.min(255, b * 255));
+      img.data[idx + 3] = Math.round(density * 255);
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(cvs);
+  _nebulaCache.set(key, tex);
+  return tex;
 }
 
 function makeSoftDot(sz: number): THREE.CanvasTexture {
@@ -805,21 +921,37 @@ interface SkillStarRef {
   brightness: number;
 }
 
-interface SkillLinkRef {
-  line: THREE.Line;
-  mat: THREE.LineBasicMaterial;
+interface NebulaWispRef {
+  sprite: THREE.Sprite;
+  mat: THREE.SpriteMaterial;
+  basePos: THREE.Vector3;
+  baseScale: number;
+  baseOpacity: number;
+  aspectRatio: number;
+  driftSpeed: number;
+  driftOffset: number;
+  breathSpeed: number;
+  breathOffset: number;
+  category: 'dense_core' | 'broad_cloud' | 'filament' | 'dust_veil' | 'illumination';
+  flickerSpeed: number;
+  flickerOffset: number;
+  flickerAmp: number;
+  rotationSpeed: number;
+  depthFactor: number;
+  drift2Speed: number;
+  drift2Offset: number;
 }
 
 interface SkillClusterRef {
   grp: THREE.Group;
   stars: SkillStarRef[];
-  links: SkillLinkRef[];
+  nebula: NebulaWispRef[];
   light: THREE.PointLight;
-  aura: THREE.Sprite;
   dust: THREE.Points;
+  nebulaCloud: THREE.Points;
+  nebulaCloudGeo: THREE.BufferGeometry;
   spread: number;
   bp: THREE.Vector3;
-  auraBase: number;
 }
 
 interface CometRef {
@@ -910,6 +1042,7 @@ export default function CinematicCosmos() {
   const mapScrollRef = useRef({ progress: 0, target: 0, smooth: 0 });
   const mapLabelRefs = useRef<(HTMLDivElement | null)[]>([]);
   const mapDotRef = useRef<HTMLDivElement | null>(null);
+  const secLabelRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   useEffect(() => {
     const ct = mountRef.current;
@@ -1090,7 +1223,7 @@ export default function CinematicCosmos() {
       const t = i / nebCount;
       const pt = camPath.getPointAt(Math.min(0.98, t));
       const col = nebColors[Math.floor(Math.random() * nebColors.length)];
-      const tex = makeNebula(col, 256);
+      const tex = makeNebulaTexture(col, mob ? 128 : 256, i * 7 + 42, 'broad_cloud');
       const sp = new THREE.Sprite(new THREE.SpriteMaterial({
         map: tex, transparent: true, opacity: 0.03 + Math.random() * 0.04,
         blending: THREE.NormalBlending, depthWrite: false,
@@ -1187,57 +1320,207 @@ export default function CinematicCosmos() {
         });
       });
 
-      const links: SkillLinkRef[] = [];
-      cluster.links.forEach(([fromIdx, toIdx]) => {
-        const from = starPositions[fromIdx];
-        const to = starPositions[toIdx];
-        if (!from || !to) return;
-        const lineGeo = new THREE.BufferGeometry().setFromPoints([from, to]);
-        const linkMat = new THREE.LineBasicMaterial({
-          color: tint.clone().lerp(new THREE.Color("#FFFFFF"), 0.45),
+      // ── Nebula: volumetric particle cloud + domain-warped billboard sprites ──
+      const nebula: NebulaWispRef[] = [];
+      const texSz = mob ? 128 : 256;
+
+      // Layer 1: Volumetric Particle Cloud (soft particles in spheroidal volume)
+      const ncN = mob ? 200 : 400;
+      const ncPositions = new Float32Array(ncN * 3);
+      const ncColors = new Float32Array(ncN * 3);
+      const blueCore = accent.clone(); blueCore.offsetHSL(-0.06, 0.08, 0.12);
+      const warmEdge = accent.clone(); warmEdge.offsetHSL(0.04, -0.02, -0.04);
+      for (let j = 0; j < ncN; j++) {
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos(2 * Math.random() - 1);
+        const r = spread * Math.pow(Math.random(), 0.6) * 1.8;
+        const px = Math.sin(phi) * Math.cos(theta) * r;
+        const py = Math.sin(phi) * Math.sin(theta) * r * 0.6;
+        const pz = Math.cos(phi) * r;
+        ncPositions[j * 3] = px;
+        ncPositions[j * 3 + 1] = py;
+        ncPositions[j * 3 + 2] = pz;
+        // Color: bluer near center, warmer at edges, with per-particle noise
+        const dist = Math.sqrt(px * px + py * py + pz * pz) / (spread * 1.8);
+        const noise = (Math.random() - 0.5) * 0.15;
+        const ct = Math.min(1, Math.max(0, dist + noise));
+        ncColors[j * 3]     = blueCore.r + (warmEdge.r - blueCore.r) * ct;
+        ncColors[j * 3 + 1] = blueCore.g + (warmEdge.g - blueCore.g) * ct;
+        ncColors[j * 3 + 2] = blueCore.b + (warmEdge.b - blueCore.b) * ct;
+      }
+      const nebulaCloudGeo = new THREE.BufferGeometry();
+      nebulaCloudGeo.setAttribute("position", new THREE.BufferAttribute(ncPositions, 3));
+      nebulaCloudGeo.setAttribute("color", new THREE.BufferAttribute(ncColors, 3));
+      const nebulaCloud = new THREE.Points(
+        nebulaCloudGeo,
+        new THREE.PointsMaterial({
+          size: mob ? 0.12 : 0.1,
+          map: dotTex,
+          vertexColors: true,
           transparent: true,
-          opacity: 0,
+          opacity: 0.08,
           blending: THREE.AdditiveBlending,
           depthWrite: false,
-        });
-        const line = new THREE.Line(lineGeo, linkMat);
-        grp.add(line);
-        links.push({ line, mat: linkMat });
-      });
+        })
+      );
+      grp.add(nebulaCloud);
 
-      const aura = new THREE.Sprite(new THREE.SpriteMaterial({
-        map: makeGlow(cluster.color, 256),
-        transparent: true,
-        opacity: 0.15,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-      }));
-      const auraBase = spread * 1.8;
-      aura.scale.set(auraBase, auraBase, 1);
-      grp.add(aura);
+      // Layer 2: Structural Billboard Sprites (domain-warped textures)
+      // Texture pool: 2 dense_core + 2 broad_cloud + 2 filament + 1 dust_veil
+      const denseCoreTex = [0, 1].map(i => makeNebulaTexture(cluster.color, texSz, idx * 7 + i * 13, 'dense_core'));
+      const broadCloudTex = [0, 1].map(i => makeNebulaTexture(cluster.color, texSz, idx * 7 + i * 17 + 50, 'broad_cloud'));
+      const filamentTex = [0, 1].map(i => makeNebulaTexture(cluster.color, texSz, idx * 7 + i * 19 + 100, 'filament'));
+      const dustVeilTex = [makeNebulaTexture(cluster.color, texSz, idx * 7 + 150, 'dust_veil')];
+      // Blue-shifted glow color for illumination wisps
+      const illumColor = accent.clone(); illumColor.offsetHSL(-0.06, 0.08, 0.18);
+      const illumHex = '#' + illumColor.getHexString();
+
+      // Compute glow weights for star-biased placement
+      const glowWeights = starPositions.map((_, ni) => {
+        const g = cluster.nodes[ni]?.glow ?? 1;
+        return g * g;
+      });
+      const totalGlow = glowWeights.reduce((a, b) => a + b, 0);
+      const sortedByGlow = starPositions.map((p, ni) => ({ p, g: cluster.nodes[ni]?.glow ?? 1 }))
+        .sort((a, b) => b.g - a.g);
+
+      const pickStarPos = (radiusMul: number) => {
+        let pick = Math.random() * totalGlow, chosen = 0;
+        for (let s = 0; s < glowWeights.length; s++) { pick -= glowWeights[s]; if (pick <= 0) { chosen = s; break; } }
+        const sp = starPositions[chosen];
+        return new THREE.Vector3(
+          sp.x + (Math.random() - 0.5) * spread * radiusMul,
+          sp.y + (Math.random() - 0.5) * spread * radiusMul * 0.7,
+          sp.z + (Math.random() - 0.5) * spread * radiusMul * 0.8
+        );
+      };
+
+      const addWisp = (
+        cat: NebulaWispRef['category'],
+        tex: THREE.CanvasTexture, pos: THREE.Vector3,
+        opacity: number, scale: number, aspect: number,
+        blending: THREE.Blending = THREE.AdditiveBlending
+      ) => {
+        const mat = new THREE.SpriteMaterial({
+          map: tex, transparent: true, opacity,
+          blending, depthWrite: false,
+          rotation: Math.random() * Math.PI * 2,
+        });
+        const sprite = new THREE.Sprite(mat);
+        sprite.scale.set(scale, scale * aspect, 1);
+        sprite.position.copy(pos);
+        grp.add(sprite);
+        nebula.push({
+          sprite, mat, basePos: pos.clone(), baseScale: scale, baseOpacity: opacity, aspectRatio: aspect,
+          driftSpeed: 0.15 + Math.random() * 0.25,
+          driftOffset: Math.random() * Math.PI * 2,
+          breathSpeed: 0.3 + Math.random() * 0.4,
+          breathOffset: Math.random() * Math.PI * 2,
+          category: cat,
+          flickerSpeed: 0.3 + Math.random() * 3.2,
+          flickerOffset: Math.random() * Math.PI * 2,
+          flickerAmp: 0.01 + Math.random() * 0.07,
+          rotationSpeed: cat === 'filament' ? 0.005 : 0.005 + Math.random() * 0.01,
+          depthFactor: 0.7 + Math.random() * 0.6,
+          drift2Speed: 0.3 + Math.random() * 0.5,
+          drift2Offset: Math.random() * Math.PI * 2,
+        });
+      };
+
+      // Sprite counts: desktop / mobile
+      const dcN = mob ? 2 : 3, bcN = mob ? 2 : 4, flN = mob ? 1 : 3, dvN = mob ? 1 : 2, ilN = mob ? 1 : 3;
+
+      // Dense core: tight around brightest stars
+      for (let w = 0; w < dcN; w++) {
+        const bright = sortedByGlow[w % Math.min(3, sortedByGlow.length)];
+        const pos = new THREE.Vector3(
+          bright.p.x + (Math.random() - 0.5) * spread * 0.35,
+          bright.p.y + (Math.random() - 0.5) * spread * 0.25,
+          bright.p.z + (Math.random() - 0.5) * spread * 0.3
+        );
+        addWisp('dense_core', denseCoreTex[w % denseCoreTex.length], pos,
+          0.35 + Math.random() * 0.25,
+          spread * (0.5 + Math.random() * 0.5),
+          0.7 + Math.random() * 0.5);
+      }
+
+      // Broad cloud: 50% near stars, 50% scattered
+      for (let w = 0; w < bcN; w++) {
+        const pos = w < bcN / 2 ? pickStarPos(0.6) : new THREE.Vector3(
+          (Math.random() - 0.5) * spread * 2.4,
+          (Math.random() - 0.5) * spread * 1.4,
+          (Math.random() - 0.5) * spread * 1.8
+        );
+        addWisp('broad_cloud', broadCloudTex[w % broadCloudTex.length], pos,
+          0.15 + Math.random() * 0.25,
+          spread * (0.6 + Math.random() * 1.2),
+          0.55 + Math.random() * 0.7);
+      }
+
+      // Filament: elongated wisps at cluster edges
+      for (let w = 0; w < flN; w++) {
+        const angle = Math.random() * Math.PI * 2;
+        const rDist = spread * (0.8 + Math.random() * 1.2);
+        const pos = new THREE.Vector3(
+          Math.cos(angle) * rDist,
+          Math.sin(angle) * rDist * 0.6,
+          (Math.random() - 0.5) * spread * 1.2
+        );
+        addWisp('filament', filamentTex[w % filamentTex.length], pos,
+          0.08 + Math.random() * 0.14,
+          spread * (1.2 + Math.random() * 1.5),
+          0.15 + Math.random() * 0.2);
+      }
+
+      // Dust veil: NormalBlending to partially obscure layers (absorption/depth)
+      for (let w = 0; w < dvN; w++) {
+        const pos = pickStarPos(0.8);
+        addWisp('dust_veil', dustVeilTex[w % dustVeilTex.length], pos,
+          0.12 + Math.random() * 0.1,
+          spread * (0.8 + Math.random() * 1.0),
+          0.6 + Math.random() * 0.6,
+          THREE.NormalBlending);
+      }
+
+      // Illumination: blue-shifted glow near hot stars
+      for (let w = 0; w < ilN; w++) {
+        const bright = sortedByGlow[w % Math.min(3, sortedByGlow.length)];
+        const pos = new THREE.Vector3(
+          bright.p.x + (Math.random() - 0.5) * spread * 0.25,
+          bright.p.y + (Math.random() - 0.5) * spread * 0.2,
+          bright.p.z + (Math.random() - 0.5) * spread * 0.2
+        );
+        addWisp('illumination', makeGlow(illumHex, 64), pos,
+          0.06 + Math.random() * 0.08,
+          spread * (0.6 + Math.random() * 0.5),
+          0.8 + Math.random() * 0.4);
+      }
+
       const light = new THREE.PointLight(accent.clone().lerp(new THREE.Color("#FFFFFF"), 0.22), 0, spread * 11.5, 2);
       light.position.set(0, 0, 0);
       grp.add(light);
 
-      const dN = mob ? 30 : 60;
+      // ── Dust particles (spherical volume, slightly oblate) ──
+      const dN = mob ? 50 : 100;
       const dP = new Float32Array(dN * 3);
       for (let j = 0; j < dN; j++) {
-        const a = Math.random() * Math.PI * 2;
-        const r = spread * (1.75 + Math.random() * 1.12);
-        dP[j * 3] = Math.cos(a) * r;
-        dP[j * 3 + 1] = (Math.random() - 0.5) * (spread * 0.18);
-        dP[j * 3 + 2] = Math.sin(a) * r;
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos(2 * Math.random() - 1);
+        const r = spread * (0.3 + Math.random() * 1.5);
+        dP[j * 3] = Math.sin(phi) * Math.cos(theta) * r;
+        dP[j * 3 + 1] = Math.sin(phi) * Math.sin(theta) * r * 0.55; // oblate y
+        dP[j * 3 + 2] = Math.cos(phi) * r;
       }
       const dGeo = new THREE.BufferGeometry();
       dGeo.setAttribute("position", new THREE.BufferAttribute(dP, 3));
       const dust = new THREE.Points(
         dGeo,
         new THREE.PointsMaterial({
-          size: 0.022,
+          size: 0.028,
           map: dotTex,
           color: tint.clone(),
           transparent: true,
-          opacity: 0.19,
+          opacity: 0.22,
           blending: THREE.AdditiveBlending,
           depthWrite: false,
         })
@@ -1246,7 +1529,7 @@ export default function CinematicCosmos() {
 
       grp.visible = false;
       scene.add(grp);
-      skillClusters.push({ grp, stars, links, light, aura, dust, spread, bp: skillPos[idx].clone(), auraBase });
+      skillClusters.push({ grp, stars, nebula, light, dust, nebulaCloud, nebulaCloudGeo, spread, bp: skillPos[idx].clone() });
     });
 
     /* ── Comet trails (experience) ── */
@@ -1851,6 +2134,21 @@ export default function CinematicCosmos() {
     // Map camera: side view that travels alongside the path as user scrolls
     const MAP_CAM_OFFSET = new THREE.Vector3(28, 14, 0); // offset from path point (side + above)
 
+    /* ── Floating section labels (3D-projected) ── */
+    const SEC_LABELS = [
+      { name: "About", t: 0.12, color: "#FF6B35" },
+      { name: "Education", t: EDUCATION_START + 0.01, color: "#B0A0FF" },
+      { name: "Skills", t: SKILLS_START + 0.01, color: "#00E5A0" },
+      { name: "Experience", t: EXPERIENCE_START + 0.01, color: "#B88CFF" },
+      { name: "Projects", t: PROJECTS_START + 0.01, color: "#D7AA6B" },
+      { name: "Contact", t: CONTACT_START + 0.01, color: "#FF6B35" },
+    ];
+    const secLabelPositions = SEC_LABELS.map(sl => {
+      const pt = camPath.getPointAt(Math.min(0.998, sl.t));
+      // Offset above and slightly to the left of the camera path
+      return new THREE.Vector3(pt.x - 2.5, pt.y + 3.2, pt.z + 1.0);
+    });
+
     /* ════════════════════════════════════
        EVENTS
        ════════════════════════════════════ */
@@ -2122,20 +2420,53 @@ export default function CinematicCosmos() {
         cluster.grp.rotation.y = Math.sin(bt * 0.18 + i) * 0.2;
         cluster.grp.rotation.x = Math.cos(bt * 0.15 + i * 0.4) * 0.08;
 
-        const auraMat = cluster.aura.material as THREE.SpriteMaterial;
-        auraMat.opacity = 0.01 + focus * 0.06 + Math.sin(bt * 0.82) * 0.01;
-        const auraScale = cluster.auraBase * (1 + Math.sin(bt * 0.66) * 0.08 + focus * 0.14);
-        cluster.aura.scale.set(auraScale, auraScale, 1);
+        // Nebula wisps: turbulent drift, flicker, rotation, category-specific behavior
+        cluster.nebula.forEach((wisp) => {
+          const dt1 = bt * wisp.driftSpeed + wisp.driftOffset;
+          const dt2 = bt * wisp.drift2Speed * 2.3 + wisp.drift2Offset;
+          const driftAmp = wisp.category === 'illumination' ? 0.05
+            : wisp.category === 'dust_veil' ? 0.04
+            : wisp.category === 'filament' ? 0.1 : 0.2;
+          wisp.sprite.position.x = wisp.basePos.x + (Math.sin(dt1 * 1.1) + Math.sin(dt2 * 0.73) * 0.4) * driftAmp;
+          wisp.sprite.position.y = wisp.basePos.y + (Math.cos(dt1 * 0.95) + Math.cos(dt2 * 0.61) * 0.4) * driftAmp;
+          wisp.sprite.position.z = wisp.basePos.z + (Math.sin(dt1 * 0.74) + Math.sin(dt2 * 0.87) * 0.3) * driftAmp * 0.75;
+
+          let opacityMul: number;
+          if (wisp.category === 'illumination') opacityMul = 0.4 + focus * 1.2;
+          else if (wisp.category === 'dust_veil') opacityMul = 0.7 + focus * 0.5;
+          else if (wisp.category === 'filament') opacityMul = 0.6 + focus * 0.8;
+          else opacityMul = 0.5 + focus * 1.0;
+          const flicker = 1 + Math.sin(bt * wisp.flickerSpeed + wisp.flickerOffset) * wisp.flickerAmp;
+          wisp.mat.opacity = wisp.baseOpacity * opacityMul * flicker;
+
+          const breathAmp = wisp.category === 'filament' ? 0.06
+            : wisp.category === 'dust_veil' ? 0.03
+            : wisp.category === 'illumination' ? 0.15 : 0.10;
+          const breath = 1 + Math.sin(bt * wisp.breathSpeed + wisp.breathOffset) * breathAmp;
+          const focusGrow = 1 + focus * 0.15;
+          const s = wisp.baseScale * breath * focusGrow;
+          wisp.sprite.scale.set(s, s * wisp.aspectRatio, 1);
+
+          wisp.mat.rotation += wisp.rotationSpeed * dtN;
+        });
+
+        // Volumetric nebula cloud animation
+        cluster.nebulaCloud.rotation.y += 0.008 * dtN;
+        cluster.nebulaCloud.rotation.x += 0.005 * dtN;
+        cluster.nebulaCloud.rotation.z += 0.003 * dtN;
+        const ncMat = cluster.nebulaCloud.material as THREE.PointsMaterial;
+        ncMat.opacity = 0.06 + focus * 0.16;
+        const ncBreath = 1 + Math.sin(bt * 0.35 + i * 1.2) * 0.06;
+        const ncFocusScale = 1 + focus * 0.12;
+        const ncs = ncBreath * ncFocusScale;
+        cluster.nebulaCloud.scale.set(ncs, ncs, ncs);
+
         cluster.light.intensity = 0.02 + focus * 0.3 + Math.sin(bt * 1.1 + i) * 0.02;
 
         cluster.dust.rotation.y = bt * 0.23;
         cluster.dust.rotation.x = Math.sin(bt * 0.17) * 0.2;
         const dustMat = cluster.dust.material as THREE.PointsMaterial;
-        dustMat.opacity = 0.03 + focus * 0.08;
-
-        cluster.links.forEach((link) => {
-          link.mat.opacity = focus * 0.12;
-        });
+        dustMat.opacity = 0.04 + focus * 0.1;
 
         cluster.stars.forEach((star, starIdx) => {
           const wobble = bt * 0.9 + star.twinkle + starIdx * 0.12;
@@ -2428,6 +2759,29 @@ export default function CinematicCosmos() {
       renderer.clear();
       renderer.render(compScene, orthoCamera);
 
+      // Project floating section labels to screen
+      if (mf < 0.01) {
+        SEC_LABELS.forEach((sl, i) => {
+          const el = secLabelRefs.current[i];
+          if (!el) return;
+          const pos3 = secLabelPositions[i];
+          const dist = camera.position.distanceTo(pos3);
+          const fadeIn = clamp(1 - (dist - 4) / 12, 0, 1);
+          const fadeOut = clamp((dist - 1.5) / 2, 0, 1);
+          const opacity = fadeIn * fadeOut;
+          if (opacity < 0.01) { el.style.opacity = "0"; return; }
+          const proj = pos3.clone().project(camera);
+          const inFront = proj.z < 1;
+          const sx = (proj.x * 0.5 + 0.5) * curW;
+          const sy = (-proj.y * 0.5 + 0.5) * curH;
+          const onScreen = inFront && sx > -100 && sx < curW + 100 && sy > -100 && sy < curH + 100;
+          el.style.transform = `translate(-50%,-50%) translate(${sx}px,${sy}px)`;
+          el.style.opacity = onScreen ? String(opacity * 0.85) : "0";
+        });
+      } else {
+        SEC_LABELS.forEach((_, i) => { const el = secLabelRefs.current[i]; if (el) el.style.opacity = "0"; });
+      }
+
       let sec = 0;
       if (p < 0.1) {
         sec = 0;
@@ -2507,6 +2861,7 @@ export default function CinematicCosmos() {
       // Dispose cached textures
       _glowCache.forEach(t => t.dispose()); _glowCache.clear();
       _glintCache.forEach(t => t.dispose()); _glintCache.clear();
+      _nebulaCache.forEach(t => t.dispose()); _nebulaCache.clear();
 
       renderer.dispose();
       [mainTarget, brightTarget, pingTarget, pongTarget, ping2, pong2].forEach(t => t.dispose());
@@ -2756,7 +3111,7 @@ export default function CinematicCosmos() {
   return (
     <div className="cosmos-root" style={{ width: "100%", height: "100dvh", position: "relative", background: "#02040b", overflow: "hidden", cursor: isMobile ? "auto" : "none" }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,wght@0,400;0,700;0,900;1,400&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=DM+Mono:wght@300;400;500&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=DM+Mono:wght@300;400;500&display=swap');
         @supports not (height: 100dvh) { .cosmos-root { height: 100vh !important; } }
         @keyframes pulse{0%,100%{opacity:.2}50%{opacity:.6}}
         @keyframes loaderBar{from{width:0%}to{width:100%}}
@@ -2835,7 +3190,7 @@ export default function CinematicCosmos() {
           animation: "loaderFadeOut 0.8s cubic-bezier(.16,1,.3,1) 2.8s forwards",
         }}>
           <div style={{
-            fontFamily: "'Bodoni Moda',serif", fontSize: 32, fontWeight: 900,
+            fontFamily: "'Space Grotesk',sans-serif", fontSize: 32, fontWeight: 700,
             color: "rgba(255,255,255,.6)",
             animation: "loaderLogoFade 0.6s ease forwards",
           }}>A.</div>
@@ -2856,6 +3211,42 @@ export default function CinematicCosmos() {
           }}>{loaderReady ? "ready" : "initializing cosmos..."}</div>
         </div>
       )}
+
+      {/* ═══ Floating section labels (3D-projected) ═══ */}
+      <div style={{ position: "absolute", inset: 0, zIndex: 11, pointerEvents: "none" }}>
+        {[
+          { name: "About", color: "#FF6B35" },
+          { name: "Education", color: "#B0A0FF" },
+          { name: "Skills", color: "#00E5A0" },
+          { name: "Experience", color: "#B88CFF" },
+          { name: "Projects", color: "#D7AA6B" },
+          { name: "Contact", color: "#FF6B35" },
+        ].map((sl, idx) => (
+          <div
+            key={sl.name}
+            ref={el => { secLabelRefs.current[idx] = el; }}
+            style={{
+              position: "absolute", top: 0, left: 0,
+              opacity: 0, transition: "opacity 0.5s ease",
+              display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
+            }}
+          >
+            <span style={{
+              fontFamily: "'Space Grotesk',sans-serif",
+              fontWeight: 500,
+              fontSize: isMobile ? 11 : 14,
+              letterSpacing: ".18em",
+              textTransform: "uppercase",
+              color: sl.color,
+              textShadow: `0 0 20px ${sl.color}60, 0 0 40px ${sl.color}30`,
+            }}>{sl.name}</span>
+            <div style={{
+              width: isMobile ? 20 : 28, height: 1,
+              background: `linear-gradient(90deg, transparent, ${sl.color}60, transparent)`,
+            }} />
+          </div>
+        ))}
+      </div>
 
       {/* ═══ 3D MAP LABELS (projected from Three.js scene) ═══ */}
       {mapShown && (
@@ -2944,7 +3335,7 @@ export default function CinematicCosmos() {
           <span style={{ fontFamily: "'DM Mono',monospace", fontSize: isMobile ? 8 : 10, letterSpacing: ".25em", textTransform: "uppercase", color: "rgba(255,255,255,.3)", textAlign: "center" }}>Fullstack Developer · Builder · Seeker</span>
           <div style={{ width: isMobile ? 20 : 36, height: 1, background: "linear-gradient(90deg,#FF6B35,transparent)" }} />
         </div>
-        <h1 style={{ fontFamily: "'Bodoni Moda',serif", fontWeight: 900, fontSize: isMobile ? "min(16vw,72px)" : "min(13vw,130px)", lineHeight: .9, letterSpacing: "-.04em", textAlign: "center", color: "#fff", textShadow: "0 0 80px rgba(255,107,53,.15), 0 0 160px rgba(255,107,53,.06)", opacity: heroReady ? 1 : 0, transform: heroReady ? "translateY(0)" : "translateY(50px)", transition: "all 1s cubic-bezier(.16,1,.3,1) .15s" }}>Atharva</h1>
+        <h1 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: isMobile ? "min(16vw,72px)" : "min(13vw,130px)", lineHeight: .9, letterSpacing: "-.02em", textAlign: "center", color: "#fff", textShadow: "0 0 80px rgba(255,107,53,.15), 0 0 160px rgba(255,107,53,.06)", opacity: heroReady ? 1 : 0, transform: heroReady ? "translateY(0)" : "translateY(50px)", transition: "all 1s cubic-bezier(.16,1,.3,1) .15s" }}>Atharva</h1>
         <p style={{ fontFamily: "'Cormorant Garamond',serif", fontWeight: 300, fontStyle: "italic", fontSize: isMobile ? "min(4.5vw,18px)" : "min(3.5vw,24px)", color: "rgba(255,255,255,.25)", marginTop: isMobile ? 10 : 16, opacity: heroReady ? 1 : 0, transition: "opacity 1s ease .5s" }}>crafting intelligent systems</p>
         <div style={{ position: "absolute", bottom: isMobile ? 60 : 40, display: "flex", flexDirection: "column", alignItems: "center", gap: 8, opacity: heroReady ? 1 : 0, transition: "opacity 1s ease 1s" }}>
           <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, letterSpacing: ".3em", textTransform: "uppercase", color: "rgba(255,255,255,.13)" }}>{isMobile ? "Swipe to fly" : "Scroll to fly"}</span>
@@ -2972,7 +3363,7 @@ export default function CinematicCosmos() {
             {activeEdu.sanskrit}
           </div>
           <h2 style={{
-            fontFamily: "'Bodoni Moda',serif", fontWeight: 700,
+            fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700,
             fontSize: "min(6vw,46px)", color: "#fff", lineHeight: 1.1,
             letterSpacing: "-.02em", marginBottom: 6,
             textShadow: `0 0 40px ${activeEdu.color}28`,
@@ -3014,7 +3405,7 @@ export default function CinematicCosmos() {
               {activeSkill.sanskrit} · {activeSkill.philosophy}
             </div>
             <h3 style={{
-              fontFamily: "'Bodoni Moda',serif",
+              fontFamily: "'Space Grotesk',sans-serif",
               fontWeight: 700,
               fontSize: "min(6vw,46px)",
               color: "#fff",
@@ -3062,7 +3453,7 @@ export default function CinematicCosmos() {
       {skillsOp > 0.01 && SKILLS_LAYOUT_MODE === "classic" && <div style={{ ...S.overlay, alignItems: "center", justifyContent: "center", opacity: skillsOp }}>
         <div style={{ maxWidth: 780, width: "100%", padding: "0 28px", transform: `translateY(${(1 - skillsOp) * 22}px)` }}>
           <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, letterSpacing: ".22em", textTransform: "uppercase", color: "#00E5A0", marginBottom: 18, opacity: .8 }}>[SYS.STACK]</div>
-          <h3 style={{ fontFamily: "'Bodoni Moda',serif", fontWeight: 700, fontSize: "min(5vw,40px)", lineHeight: 1.15, letterSpacing: "-.02em", color: "rgba(255,255,255,.94)", marginBottom: 14 }}>
+          <h3 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: "min(5vw,40px)", lineHeight: 1.15, letterSpacing: "-.02em", color: "rgba(255,255,255,.94)", marginBottom: 14 }}>
             Skills Constellation
           </h3>
           <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "min(2.7vw,20px)", lineHeight: 1.6, color: "rgba(255,255,255,.55)", marginBottom: 20 }}>
@@ -3094,7 +3485,7 @@ export default function CinematicCosmos() {
               <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, letterSpacing: ".2em", textTransform: "uppercase", color: exp.color, opacity: .7, marginBottom: 10 }}>
                 {exp.timeframe}{exp.ongoing ? " · in flight" : ""}
               </div>
-              <h2 style={{ fontFamily: "'Bodoni Moda',serif", fontWeight: 700, fontSize: "min(6vw,46px)", color: "#fff", lineHeight: 1.1, letterSpacing: "-.02em", marginBottom: 6, textShadow: `0 0 40px ${exp.color}28` }}>{exp.company}</h2>
+              <h2 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: "min(6vw,46px)", color: "#fff", lineHeight: 1.1, letterSpacing: "-.02em", marginBottom: 6, textShadow: `0 0 40px ${exp.color}28` }}>{exp.company}</h2>
               <p style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, letterSpacing: ".04em", color: exp.color, opacity: .85, marginBottom: 14 }}>{exp.role}</p>
               <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, lineHeight: 1.75, color: "rgba(255,255,255,.46)", marginBottom: 14 }}>{exp.summary}</p>
               <p style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, letterSpacing: ".08em", color: exp.color, opacity: .72 }}>
@@ -3116,7 +3507,7 @@ export default function CinematicCosmos() {
               <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, letterSpacing: ".2em", textTransform: "uppercase", color: slot.color, opacity: .7, marginBottom: 10 }}>
                 {slot.planet.label} · {slot.planet.sanskrit} · {proj.sub}
               </div>
-              <h2 style={{ fontFamily: "'Bodoni Moda',serif", fontWeight: 700, fontSize: "min(6vw,46px)", color: "#fff", lineHeight: 1.1, letterSpacing: "-.02em", marginBottom: 12, textShadow: `0 0 40px ${slot.color}28` }}>{proj.title}</h2>
+              <h2 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: "min(6vw,46px)", color: "#fff", lineHeight: 1.1, letterSpacing: "-.02em", marginBottom: 12, textShadow: `0 0 40px ${slot.color}28` }}>{proj.title}</h2>
               <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 16, lineHeight: 1.75, color: "rgba(255,255,255,.46)", marginBottom: 12 }}>{proj.desc}</p>
               <p style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, letterSpacing: ".08em", color: slot.color, opacity: .72, marginBottom: 16 }}>
                 [{slot.planet.philosophy}{slot.isPlaceholder ? " · placeholder orbit" : ""}]
@@ -3132,7 +3523,7 @@ export default function CinematicCosmos() {
       {/* ═══ CONTACT ═══ */}
       {contactOp > 0.01 && <div style={{ ...S.overlay, flexDirection: "column", alignItems: "center", justifyContent: "center", pointerEvents: contactOp > .5 ? "auto" : "none", opacity: contactOp, padding: isMobile ? "0 20px" : 0 }}>
         <div style={{ fontFamily: "'DM Mono',monospace", fontSize: isMobile ? 9 : 10, letterSpacing: ".3em", textTransform: "uppercase", color: "rgba(255,255,255,.18)", marginBottom: 20 }}>[SIGNAL.TRANSMIT]</div>
-        <h2 style={{ fontFamily: "'Bodoni Moda',serif", fontWeight: 700, fontSize: isMobile ? "min(8vw,36px)" : "min(6vw,50px)", textAlign: "center", lineHeight: 1.15, marginBottom: 14, background: "linear-gradient(135deg,#FF6B35,#FFD93D,#00E5A0)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Let&#39;s build something<br />extraordinary</h2>
+        <h2 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: isMobile ? "min(8vw,36px)" : "min(6vw,50px)", textAlign: "center", lineHeight: 1.15, marginBottom: 14, background: "linear-gradient(135deg,#FF6B35,#FFD93D,#00E5A0)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Let&#39;s build something<br />extraordinary</h2>
         <p style={{ fontFamily: "'Cormorant Garamond',serif", fontStyle: "italic", fontSize: isMobile ? 14 : 16, color: "rgba(255,255,255,.22)", marginBottom: 32, textAlign: "center" }}>Open to conversations about AI, infrastructure & ambitious projects</p>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
           {["GitHub ↗", "Twitter ↗", "Email →"].map(l => (
@@ -3145,7 +3536,7 @@ export default function CinematicCosmos() {
       </div>}
 
       {/* ═══ FIXED UI ═══ */}
-      <div style={{ position: "absolute", top: isMobile ? 14 : 20, left: isMobile ? 14 : 22, zIndex: 20, fontFamily: "'Bodoni Moda',serif", fontSize: isMobile ? 15 : 17, fontWeight: 700, color: "rgba(255,255,255,.4)", opacity: ui.loaded ? 1 : 0, transition: "opacity .8s ease .3s" }}>A.</div>
+      <div style={{ position: "absolute", top: isMobile ? 14 : 20, left: isMobile ? 14 : 22, zIndex: 20, fontFamily: "'Space Grotesk',sans-serif", fontSize: isMobile ? 15 : 17, fontWeight: 700, color: "rgba(255,255,255,.4)", opacity: ui.loaded ? 1 : 0, transition: "opacity .8s ease .3s" }}>A.</div>
 
       {/* Mini-map toggle */}
       <div
@@ -3262,12 +3653,12 @@ export default function CinematicCosmos() {
         <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: "rgba(255,255,255,.1)", marginTop: 5 }}>{Math.round(p * 100)}%</span>
       </div>
 
-      <div style={{ position: "absolute", bottom: isMobile ? 14 : 18, left: isMobile ? 14 : 22, zIndex: 20, fontFamily: "'DM Mono',monospace", fontSize: isMobile ? 8 : 9, letterSpacing: ".12em", color: "rgba(255,255,255,.08)" }}>[ {SECTIONS[ui.section]} ]</div>
+      <div style={{ position: "absolute", bottom: isMobile ? 14 : 18, left: isMobile ? 14 : 22, zIndex: 20, fontFamily: "'DM Mono',monospace", fontSize: isMobile ? 8 : 9, letterSpacing: ".12em", color: "rgba(255,255,255,.3)" }}>[ {SECTIONS[ui.section]} ]</div>
 
       {ui.loaded && !isMobile && (
         <div style={{ position: "absolute", bottom: 6, left: 22, zIndex: 20, fontFamily: "'DM Mono',monospace", fontSize: 8, letterSpacing: ".1em", display: "flex", gap: 6 }}>
-          <span style={{ color: "rgba(255,255,255,.06)" }}>LOCAL.SOL</span>
-          <span style={{ color: "rgba(255,255,255,.08)" }}>{clockTime}</span>
+          <span style={{ color: "rgba(255,255,255,.25)" }}>LOCAL.SOL</span>
+          <span style={{ color: "rgba(255,255,255,.35)" }}>{clockTime}</span>
         </div>
       )}
 

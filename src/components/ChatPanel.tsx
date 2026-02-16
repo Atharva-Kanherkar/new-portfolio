@@ -232,7 +232,7 @@ export default function ChatPanel({ isOpen, onClose, accentColor: ac }: ChatPane
         >
           <h2
             style={{
-              fontFamily: "'Bodoni Moda',serif",
+              fontFamily: "'Space Grotesk',sans-serif",
               fontWeight: 700,
               fontSize: 17,
               color: "rgba(255,255,255,0.72)",
@@ -383,7 +383,7 @@ export default function ChatPanel({ isOpen, onClose, accentColor: ac }: ChatPane
                         h1: ({ children }) => (
                           <h1
                             style={{
-                              fontFamily: "'Bodoni Moda',serif",
+                              fontFamily: "'Space Grotesk',sans-serif",
                               fontSize: 18,
                               fontWeight: 700,
                               color: "rgba(255,255,255,0.72)",
@@ -396,7 +396,7 @@ export default function ChatPanel({ isOpen, onClose, accentColor: ac }: ChatPane
                         h2: ({ children }) => (
                           <h2
                             style={{
-                              fontFamily: "'Bodoni Moda',serif",
+                              fontFamily: "'Space Grotesk',sans-serif",
                               fontSize: 16,
                               fontWeight: 700,
                               color: "rgba(255,255,255,0.68)",
@@ -409,7 +409,7 @@ export default function ChatPanel({ isOpen, onClose, accentColor: ac }: ChatPane
                         h3: ({ children }) => (
                           <h3
                             style={{
-                              fontFamily: "'Bodoni Moda',serif",
+                              fontFamily: "'Space Grotesk',sans-serif",
                               fontSize: 15,
                               fontWeight: 600,
                               color: "rgba(255,255,255,0.65)",
