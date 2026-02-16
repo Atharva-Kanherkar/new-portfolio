@@ -619,34 +619,60 @@ function makeGlow(color: string, sz: number): THREE.CanvasTexture {
   return tex;
 }
 
+function makeStarCore(sz: number): THREE.CanvasTexture {
+  const c = document.createElement("canvas"); c.width = sz; c.height = sz;
+  const ctx = c.getContext("2d")!;
+  const img = ctx.createImageData(sz, sz);
+  const h = sz / 2;
+  const sigma = sz * 0.06;
+  const sigma2 = 2 * sigma * sigma;
+  for (let y = 0; y < sz; y++) {
+    for (let x = 0; x < sz; x++) {
+      const dx = x - h, dy = y - h;
+      const intensity = Math.exp(-(dx * dx + dy * dy) / sigma2);
+      const idx = (y * sz + x) * 4;
+      img.data[idx] = img.data[idx + 1] = img.data[idx + 2] = 255;
+      img.data[idx + 3] = Math.round(intensity * 255);
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return new THREE.CanvasTexture(c);
+}
+
 const _glintCache = new Map<string, THREE.CanvasTexture>();
 function makeStarGlint(color: string, sz: number): THREE.CanvasTexture {
   const key = `${color}|${sz}`;
   const cached = _glintCache.get(key);
   if (cached) return cached;
   const c = document.createElement("canvas"); c.width = sz; c.height = sz;
-  const x = c.getContext("2d")!;
+  const ctx = c.getContext("2d")!;
+  const img = ctx.createImageData(sz, sz);
   const h = sz / 2;
-
-  const base = x.createRadialGradient(h, h, 0, h, h, h * 0.9);
-  base.addColorStop(0, "rgba(255,255,255,0.92)");
-  base.addColorStop(0.12, color + "D0");
-  base.addColorStop(0.35, color + "45");
-  base.addColorStop(1, "rgba(0,0,0,0)");
-  x.fillStyle = base;
-  x.fillRect(0, 0, sz, sz);
-
-  x.globalCompositeOperation = "lighter";
-  x.strokeStyle = color + "88";
-  x.lineWidth = Math.max(1, sz * 0.012);
-  x.beginPath(); x.moveTo(h * 0.16, h); x.lineTo(h * 1.84, h); x.stroke();
-  x.beginPath(); x.moveTo(h, h * 0.16); x.lineTo(h, h * 1.84); x.stroke();
-  x.strokeStyle = color + "55";
-  x.lineWidth = Math.max(1, sz * 0.008);
-  x.beginPath(); x.moveTo(h * 0.36, h * 0.36); x.lineTo(h * 1.64, h * 1.64); x.stroke();
-  x.beginPath(); x.moveTo(h * 1.64, h * 0.36); x.lineTo(h * 0.36, h * 1.64); x.stroke();
-  x.globalCompositeOperation = "source-over";
-
+  const col = new THREE.Color(color);
+  const cr = Math.round(col.r * 255), cg = Math.round(col.g * 255), cb = Math.round(col.b * 255);
+  const cSigma = sz * 0.03, cSigma2 = 2 * cSigma * cSigma;
+  const spikeDecay = sz * 0.22, diagDecay = sz * 0.12;
+  for (let y = 0; y < sz; y++) {
+    for (let x = 0; x < sz; x++) {
+      const dx = x - h, dy = y - h;
+      const r2 = dx * dx + dy * dy;
+      const center = Math.exp(-r2 / cSigma2) * 0.6;
+      const hS = Math.abs(dy) < 1.5 ? Math.exp(-Math.abs(dx) / spikeDecay) * 0.7 : 0;
+      const vS = Math.abs(dx) < 1.5 ? Math.exp(-Math.abs(dy) / spikeDecay) * 0.7 : 0;
+      const d1 = Math.abs(dx - dy) / 1.414, d1l = Math.abs(dx + dy) / 1.414;
+      const diag1 = d1 < 1.5 ? Math.exp(-d1l / diagDecay) * 0.25 : 0;
+      const d2 = Math.abs(dx + dy) / 1.414, d2l = Math.abs(dx - dy) / 1.414;
+      const diag2 = d2 < 1.5 ? Math.exp(-d2l / diagDecay) * 0.25 : 0;
+      const intensity = Math.min(1, center + hS + vS + diag1 + diag2);
+      const t = Math.min(1, Math.sqrt(r2) / (sz * 0.3));
+      const idx = (y * sz + x) * 4;
+      img.data[idx]     = Math.round(255 + (cr - 255) * t);
+      img.data[idx + 1] = Math.round(255 + (cg - 255) * t);
+      img.data[idx + 2] = Math.round(255 + (cb - 255) * t);
+      img.data[idx + 3] = Math.round(intensity * 255);
+    }
+  }
+  ctx.putImageData(img, 0, 0);
   const tex = new THREE.CanvasTexture(c);
   _glintCache.set(key, tex);
   return tex;
@@ -1085,7 +1111,7 @@ export default function CinematicCosmos() {
     });
     const skillClusters: SkillClusterRef[] = [];
     // Shared core glow texture for all skill stars (always white, power-of-2)
-    const sharedCoreGlow = makeGlow("#FFFFFF", 128);
+    const sharedCoreGlow = makeStarCore(128);
     SKILL_CONSTELLATIONS.forEach((cluster, idx) => {
       const grp = new THREE.Group();
       grp.position.copy(skillPos[idx]);
@@ -1094,7 +1120,7 @@ export default function CinematicCosmos() {
       const tint = accent.clone().lerp(new THREE.Color("#FFFFFF"), 0.78);
       const starGlow = makeStarGlint(cluster.color, 256);
       // Shared halo glow per cluster (same color for all stars in this constellation)
-      const clusterHaloGlow = makeGlow(cluster.color, 128);
+      const clusterHaloGlow = makeGlow(cluster.color, 64);
 
       const stars: SkillStarRef[] = [];
       const starPositions = cluster.nodes.map((node, nodeIdx) => {
@@ -1111,12 +1137,12 @@ export default function CinematicCosmos() {
         anchor.position.copy(pos);
 
         // Layer 1: Tight hot-white core (pure light point)
-        const coreSize = 0.12 + brightness * 0.06;
+        const coreSize = 0.04 + brightness * 0.03;
         const core = new THREE.Sprite(new THREE.SpriteMaterial({
           map: sharedCoreGlow,
           color: new THREE.Color("#FFFFFF").lerp(accent.clone(), 0.08),
           transparent: true,
-          opacity: 0.85,
+          opacity: 1.0,
           blending: THREE.AdditiveBlending,
           depthWrite: false,
         }));
@@ -1124,11 +1150,11 @@ export default function CinematicCosmos() {
         anchor.add(core);
 
         // Layer 2: Diffraction glint (spikes + colored haze)
-        const glintSize = coreSize * 1.8 + brightness * 0.08;
+        const glintSize = coreSize * 3.5 + brightness * 0.12;
         const glint = new THREE.Sprite(new THREE.SpriteMaterial({
           map: starGlow,
           transparent: true,
-          opacity: 0.38,
+          opacity: 0.18,
           blending: THREE.AdditiveBlending,
           depthWrite: false,
         }));
@@ -1136,11 +1162,11 @@ export default function CinematicCosmos() {
         anchor.add(glint);
 
         // Layer 3: Wide soft halo (colored atmosphere)
-        const haloSize = glintSize * 2.1;
+        const haloSize = glintSize * 1.4;
         const halo = new THREE.Sprite(new THREE.SpriteMaterial({
           map: clusterHaloGlow,
           transparent: true,
-          opacity: 0.1,
+          opacity: 0.03,
           blending: THREE.AdditiveBlending,
           depthWrite: false,
         }));
@@ -2121,19 +2147,19 @@ export default function CinematicCosmos() {
 
           // Core: tight bright point, pulses intensity
           const coreMat = star.core.material as THREE.SpriteMaterial;
-          coreMat.opacity = Math.min(1, (0.3 + focus * 0.5 + Math.sin(bt * 0.9 + star.twinkle) * 0.12) * star.brightness * star.brightness * sm);
-          const coreSize = (0.06 + star.brightness * 0.08) * pulse * sm;
+          coreMat.opacity = Math.min(1, (0.5 + focus * 0.5 + Math.sin(bt * 0.9 + star.twinkle) * 0.06) * star.brightness * star.brightness * sm);
+          const coreSize = (0.04 + star.brightness * 0.03) * pulse * sm;
           star.core.scale.set(coreSize, coreSize, 1);
 
           // Glint: diffraction spikes, scale up with focus
           const glintMat = star.glint.material as THREE.SpriteMaterial;
-          glintMat.opacity = Math.min(1, (0.08 + focus * 0.2 + Math.sin(bt * 0.6 + star.twinkle) * 0.02) * sm);
-          const glintSize = (0.14 + focus * 0.18 + Math.sin(bt * 0.4 + star.twinkle) * 0.02) * cluster.spread * star.brightness * sm;
+          glintMat.opacity = Math.min(1, (0.05 + focus * 0.14 + Math.sin(bt * 0.6 + star.twinkle) * 0.015) * sm);
+          const glintSize = (0.06 + focus * 0.1 + Math.sin(bt * 0.4 + star.twinkle) * 0.01) * cluster.spread * star.brightness * sm;
           star.glint.scale.set(glintSize, glintSize, 1);
 
           // Halo: wide atmospheric glow
           const haloMat = star.halo.material as THREE.SpriteMaterial;
-          haloMat.opacity = (0.02 + focus * 0.05 + Math.sin(bt * 0.3 + star.twinkle) * 0.01) * sm;
+          haloMat.opacity = (0.008 + focus * 0.025 + Math.sin(bt * 0.3 + star.twinkle) * 0.004) * sm;
           const haloSize = glintSize * 2.2;
           star.halo.scale.set(haloSize, haloSize, 1);
         });
