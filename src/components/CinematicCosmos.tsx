@@ -861,7 +861,19 @@ interface BinaryStarRef {
   orbitRadius: number;
 }
 
+function useIsMobile() {
+  const [mobile, setMobile] = useState(false);
+  useEffect(() => {
+    const check = () => setMobile(window.innerWidth < 768 || "ontouchstart" in window);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+  return mobile;
+}
+
 export default function CinematicCosmos() {
+  const isMobile = useIsMobile();
   const mountRef = useRef<HTMLDivElement>(null);
   const st = useRef<ScrollState>({ progress: 0, target: 0, mouse: { x: 0, y: 0 }, sm: { x: 0, y: 0 }, speed: 0 });
   const [ui, setUi] = useState<UiState>({ section: 0, progress: 0, loaded: false });
@@ -893,10 +905,11 @@ export default function CinematicCosmos() {
     const ct = mountRef.current;
     if (!ct) return;
     const W = ct.clientWidth, H = ct.clientHeight;
+    const mob = W < 768 || "ontouchstart" in window;
 
     /* ── Renderer ── */
-    const renderer = new THREE.WebGLRenderer({ antialias: false, alpha: false, powerPreference: "high-performance" });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    const renderer = new THREE.WebGLRenderer({ antialias: false, alpha: false, powerPreference: mob ? "default" : "high-performance" });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, mob ? 1.5 : 2));
     renderer.setSize(W, H);
     renderer.setClearColor(0x02040b);
     renderer.autoClear = false;
@@ -935,8 +948,8 @@ export default function CinematicCosmos() {
        BLOOM PIPELINE
        ════════════════════════════════════ */
     const mainTarget = new THREE.WebGLRenderTarget(W, H, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat, type: THREE.HalfFloatType });
-    const bloomRes = { w: Math.floor(W / 2), h: Math.floor(H / 2) };
-    const bloomRes2 = { w: Math.floor(W / 4), h: Math.floor(H / 4) };
+    const bloomRes = { w: Math.floor(W / (mob ? 3 : 2)), h: Math.floor(H / (mob ? 3 : 2)) };
+    const bloomRes2 = { w: Math.floor(W / (mob ? 6 : 4)), h: Math.floor(H / (mob ? 6 : 4)) };
     const brightTarget = new THREE.WebGLRenderTarget(bloomRes.w, bloomRes.h, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
     const pingTarget = new THREE.WebGLRenderTarget(bloomRes.w, bloomRes.h, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
     const pongTarget = new THREE.WebGLRenderTarget(bloomRes.w, bloomRes.h, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
@@ -981,7 +994,7 @@ export default function CinematicCosmos() {
        ════════════════════════════════════ */
 
     /* ── Shader-based stars ── */
-    const STAR_N = 5200;
+    const STAR_N = mob ? 2000 : 5200;
     const sPos = new Float32Array(STAR_N * 3);
     const sBright = new Float32Array(STAR_N);
     const sTemp = new Float32Array(STAR_N);
@@ -1016,7 +1029,7 @@ export default function CinematicCosmos() {
 
     /* ── Background dim dust ── */
     const dotTex = makeSoftDot(32);
-    const DUST_N = 2000;
+    const DUST_N = mob ? 800 : 2000;
     const dPos = new Float32Array(DUST_N * 3);
     const dCol = new Float32Array(DUST_N * 3);
     const dp = [[0.4, 0.17, 0.08], [0, 0.36, 0.25], [0.12, 0.32, 0.31], [0.4, 0.34, 0.1]];
@@ -1037,7 +1050,7 @@ export default function CinematicCosmos() {
     }));
     scene.add(dust);
 
-    const FAR_STAR_N = 1800;
+    const FAR_STAR_N = mob ? 600 : 1800;
     const fsPos = new Float32Array(FAR_STAR_N * 3);
     for (let i = 0; i < FAR_STAR_N; i++) {
       fsPos[i * 3] = (Math.random() - 0.5) * 440;
@@ -1061,8 +1074,9 @@ export default function CinematicCosmos() {
     /* ── Nebula clouds ── */
     const nebColors = ["#2C3A58", "#3E4D70", "#18433E", "#5A4A35", "#2C3256"];
     const nebs: { sp: THREE.Sprite; by: number; spd: number; off: number }[] = [];
-    for (let i = 0; i < 25; i++) {
-      const t = i / 25;
+    const nebCount = mob ? 12 : 25;
+    for (let i = 0; i < nebCount; i++) {
+      const t = i / nebCount;
       const pt = camPath.getPointAt(Math.min(0.98, t));
       const col = nebColors[Math.floor(Math.random() * nebColors.length)];
       const tex = makeNebula(col, 256);
@@ -1202,7 +1216,7 @@ export default function CinematicCosmos() {
       light.position.set(0, 0, 0);
       grp.add(light);
 
-      const dN = 220;
+      const dN = mob ? 80 : 220;
       const dP = new Float32Array(dN * 3);
       for (let j = 0; j < dN; j++) {
         const a = Math.random() * Math.PI * 2;
@@ -1371,7 +1385,7 @@ export default function CinematicCosmos() {
 
       // ── SUBLIMATION JETS: gas venting from nucleus surface ──
       // When sunlit side heats up, volatiles sublimate in focused jets
-      const jetN = 80;
+      const jetN = mob ? 30 : 80;
       const jetPositions = new Float32Array(jetN * 3);
       const jetVelocities = new Float32Array(jetN * 3);
       for (let j = 0; j < jetN; j++) {
@@ -1402,7 +1416,7 @@ export default function CinematicCosmos() {
       grp.add(jets);
 
       // ── DUST TRAIL PARTICLES: larger grains in the dust tail ──
-      const dustPN = 150;
+      const dustPN = mob ? 50 : 150;
       const dustPositions = new Float32Array(dustPN * 3);
       const dustVelocities = new Float32Array(dustPN * 3);
       for (let j = 0; j < dustPN; j++) {
@@ -1468,7 +1482,7 @@ export default function CinematicCosmos() {
       grp.add(bowShock);
 
       // ── ION STREAMER PARTICLES: discrete particles moving along ion tail ──
-      const ionStreamerN = 60;
+      const ionStreamerN = mob ? 20 : 60;
       const ionStreamerPositions = new Float32Array(ionStreamerN * 3);
       const ionStreamerVelocities = new Float32Array(ionStreamerN * 3);
       for (let j = 0; j < ionStreamerN; j++) {
@@ -1647,7 +1661,7 @@ export default function CinematicCosmos() {
     bsGrp.add(lagrangeGlow);
 
     // 120 orbital dust particles
-    const bsDustN = 120;
+    const bsDustN = mob ? 40 : 120;
     const bsDustPos = new Float32Array(bsDustN * 3);
     for (let j = 0; j < bsDustN; j++) {
       const a = Math.random() * Math.PI * 2;
@@ -1692,7 +1706,7 @@ export default function CinematicCosmos() {
       const grp = new THREE.Group();
       grp.position.copy(nPos[idx]);
       const radius = 0.85 * slot.planet.size;
-      const tex = makePlanetTexture(slot.color, 512);
+      const tex = makePlanetTexture(slot.color, mob ? 256 : 512);
       const core = new THREE.Mesh(
         new THREE.SphereGeometry(radius, 48, 48),
         new THREE.MeshStandardMaterial({
@@ -1731,7 +1745,7 @@ export default function CinematicCosmos() {
         map: makeGlow(slot.color, 256), transparent: true, opacity: slot.isPlaceholder ? 0.11 : 0.16, blending: THREE.AdditiveBlending, depthWrite: false,
       }));
       haze.scale.set(radius * 9.2, radius * 9.2, 1); grp.add(haze);
-      const mN = 45; const mP = new Float32Array(mN * 3);
+      const mN = mob ? 18 : 45; const mP = new Float32Array(mN * 3);
       for (let j = 0; j < mN; j++) {
         const a = (j / mN) * Math.PI * 2 + Math.random() * 0.4;
         const r = radius * 2.2 + Math.random() * (radius * 1.7);
@@ -1801,7 +1815,7 @@ export default function CinematicCosmos() {
       mapWpObjs.push({ sprite, halo, ring, pos: pos.clone() });
     });
 
-    const MAP_FLOW_N = 350;
+    const MAP_FLOW_N = mob ? 120 : 350;
     const mapFlowProg = new Float32Array(MAP_FLOW_N);
     const mapFlowPos = new Float32Array(MAP_FLOW_N * 3);
     const mapFlowCol = new Float32Array(MAP_FLOW_N * 3);
@@ -1819,7 +1833,7 @@ export default function CinematicCosmos() {
     const mapFlowPts = new THREE.Points(mapFlowGeo, new THREE.PointsMaterial({ size: 0.6, map: dotTex, vertexColors: true, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true }));
     mapGrp.add(mapFlowPts);
 
-    const MAP_DUST_N = 500;
+    const MAP_DUST_N = mob ? 150 : 500;
     const mdP = new Float32Array(MAP_DUST_N * 3);
     for (let i = 0; i < MAP_DUST_N; i++) { const t=Math.random(); const pt=camPath.getPointAt(t); mdP[i*3]=pt.x+(Math.random()-.5)*18; mdP[i*3+1]=pt.y+(Math.random()-.5)*14; mdP[i*3+2]=pt.z+(Math.random()-.5)*8; }
     const mapDustGeo = new THREE.BufferGeometry();
@@ -1836,18 +1850,21 @@ export default function CinematicCosmos() {
        ════════════════════════════════════ */
     const resize = () => {
       const w = ct.clientWidth, h = ct.clientHeight;
+      const m = w < 768 || "ontouchstart" in window;
+      const bd = m ? 3 : 2, bd2 = m ? 6 : 4;
       camera.aspect = w / h; camera.updateProjectionMatrix();
       renderer.setSize(w, h);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, m ? 1.5 : 2));
       mainTarget.setSize(w, h);
-      brightTarget.setSize(Math.floor(w / 2), Math.floor(h / 2));
-      pingTarget.setSize(Math.floor(w / 2), Math.floor(h / 2));
-      pongTarget.setSize(Math.floor(w / 2), Math.floor(h / 2));
-      ping2.setSize(Math.floor(w / 4), Math.floor(h / 4));
-      pong2.setSize(Math.floor(w / 4), Math.floor(h / 4));
-      blurMatH.uniforms.resolution.value.set(Math.floor(w / 2), Math.floor(h / 2));
-      blurMatV.uniforms.resolution.value.set(Math.floor(w / 2), Math.floor(h / 2));
-      blurMat2H.uniforms.resolution.value.set(Math.floor(w / 4), Math.floor(h / 4));
-      blurMat2V.uniforms.resolution.value.set(Math.floor(w / 4), Math.floor(h / 4));
+      brightTarget.setSize(Math.floor(w / bd), Math.floor(h / bd));
+      pingTarget.setSize(Math.floor(w / bd), Math.floor(h / bd));
+      pongTarget.setSize(Math.floor(w / bd), Math.floor(h / bd));
+      ping2.setSize(Math.floor(w / bd2), Math.floor(h / bd2));
+      pong2.setSize(Math.floor(w / bd2), Math.floor(h / bd2));
+      blurMatH.uniforms.resolution.value.set(Math.floor(w / bd), Math.floor(h / bd));
+      blurMatV.uniforms.resolution.value.set(Math.floor(w / bd), Math.floor(h / bd));
+      blurMat2H.uniforms.resolution.value.set(Math.floor(w / bd2), Math.floor(h / bd2));
+      blurMat2V.uniforms.resolution.value.set(Math.floor(w / bd2), Math.floor(h / bd2));
     };
     window.addEventListener("resize", resize);
 
@@ -1855,7 +1872,7 @@ export default function CinematicCosmos() {
     ct.addEventListener("wheel", onWheel, { passive: false });
     let tY = 0;
     const onTS = (e: TouchEvent) => { tY = e.touches[0].clientY; };
-    const onTM = (e: TouchEvent) => { e.preventDefault(); if (chatOpenRef.current) return; if (cinematicRef.current.active) { cinematicRef.current.active = false; setCinematicActive(false); } const dy = tY - e.touches[0].clientY; tY = e.touches[0].clientY; if (mapActiveRef.current) { mapScrollRef.current.target += dy * 0.0008; mapScrollRef.current.target = clamp(mapScrollRef.current.target, 0, 1); return; } st.current.target += dy * 0.0004; st.current.target = clamp(st.current.target, 0, 1); st.current.speed = Math.abs(dy * 0.002); };
+    const onTM = (e: TouchEvent) => { e.preventDefault(); if (chatOpenRef.current) return; if (cinematicRef.current.active) { cinematicRef.current.active = false; setCinematicActive(false); } const dy = tY - e.touches[0].clientY; tY = e.touches[0].clientY; if (mapActiveRef.current) { mapScrollRef.current.target += dy * 0.0008; mapScrollRef.current.target = clamp(mapScrollRef.current.target, 0, 1); return; } st.current.target += dy * (mob ? 0.0007 : 0.0004); st.current.target = clamp(st.current.target, 0, 1); st.current.speed = Math.abs(dy * 0.002); };
     ct.addEventListener("touchstart", onTS, { passive: true });
     ct.addEventListener("touchmove", onTM, { passive: false });
     const onMM = (e: MouseEvent) => { st.current.mouse.x = (e.clientX / window.innerWidth - 0.5) * 2; st.current.mouse.y = -(e.clientY / window.innerHeight - 0.5) * 2; };
@@ -2553,6 +2570,7 @@ export default function CinematicCosmos() {
   }, []);
 
   useEffect(() => {
+    if (isMobile) return;
     let raf: number;
     const update = (e: MouseEvent) => {
       cursorPos.current.x = e.clientX;
@@ -2578,7 +2596,7 @@ export default function CinematicCosmos() {
     window.addEventListener("mousemove", update);
     raf = requestAnimationFrame(tick);
     return () => { window.removeEventListener("mousemove", update); cancelAnimationFrame(raf); };
-  }, []);
+  }, [isMobile]);
 
   /* ── OVERLAY OPACITIES ── */
   const p = ui.progress;
@@ -2635,9 +2653,10 @@ export default function CinematicCosmos() {
   const S = { overlay: { position: "absolute" as const, inset: 0, zIndex: 10, display: "flex", pointerEvents: "none" as const } };
 
   return (
-    <div style={{ width: "100%", height: "100vh", position: "relative", background: "#02040b", overflow: "hidden", cursor: "none" }}>
+    <div className="cosmos-root" style={{ width: "100%", height: "100dvh", position: "relative", background: "#02040b", overflow: "hidden", cursor: isMobile ? "auto" : "none" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,wght@0,400;0,700;0,900;1,400&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=DM+Mono:wght@300;400;500&display=swap');
+        @supports not (height: 100dvh) { .cosmos-root { height: 100vh !important; } }
         @keyframes pulse{0%,100%{opacity:.2}50%{opacity:.6}}
         @keyframes loaderBar{from{width:0%}to{width:100%}}
         @keyframes loaderFadeOut{0%{opacity:1}100%{opacity:0}}
@@ -2647,7 +2666,7 @@ export default function CinematicCosmos() {
       `}</style>
 
       {/* ═══ COSMIC CURSOR ═══ */}
-      {ui.loaded && <>
+      {ui.loaded && !isMobile && <>
         {/* Trail ghosts */}
         {cursorTrails.current.map((_, i) => (
           <div
@@ -2761,17 +2780,17 @@ export default function CinematicCosmos() {
               onClick={() => { st.current.target = wp.t; dismissMap(); }}
             >
               <span style={{
-                fontFamily: "'Cormorant Garamond',serif", fontSize: 22, fontWeight: 300,
+                fontFamily: "'Cormorant Garamond',serif", fontSize: isMobile ? 16 : 22, fontWeight: 300,
                 color: wp.color, opacity: 0.7,
               }}>{wp.sanskrit}</span>
               <span style={{
-                fontFamily: "'DM Mono',monospace", fontSize: 13, letterSpacing: ".22em",
+                fontFamily: "'DM Mono',monospace", fontSize: isMobile ? 10 : 13, letterSpacing: ".22em",
                 textTransform: "uppercase", color: "#FFFFFF",
               }}>{wp.label}</span>
-              <span style={{
+              {!isMobile && <span style={{
                 fontFamily: "'Cormorant Garamond',serif", fontSize: 12, fontStyle: "italic",
                 color: "rgba(255,255,255,.55)",
-              }}>{wp.desc}</span>
+              }}>{wp.desc}</span>}
             </div>
           ))}
 
@@ -2786,14 +2805,14 @@ export default function CinematicCosmos() {
               <div style={{
                 fontFamily: "'DM Mono',monospace", fontSize: 9, letterSpacing: ".25em",
                 textTransform: "uppercase", color: "rgba(255,255,255,.12)",
-              }}>scroll to explore the flight path</div>
+              }}>{isMobile ? "tap a waypoint or begin" : "scroll to explore the flight path"}</div>
               <button
                 onClick={dismissMap}
                 style={{
                   background: "none", border: "1px solid rgba(255,107,53,.2)",
-                  borderRadius: 24, padding: "10px 28px", cursor: "pointer",
+                  borderRadius: 24, padding: isMobile ? "14px 36px" : "10px 28px", cursor: "pointer",
                   fontFamily: "'Cormorant Garamond',serif", fontStyle: "italic",
-                  fontSize: 14, color: "rgba(255,255,255,.5)", letterSpacing: ".08em",
+                  fontSize: isMobile ? 16 : 14, color: "rgba(255,255,255,.5)", letterSpacing: ".08em",
                   transition: "all .4s ease", backdropFilter: "blur(4px)",
                 }}
                 onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(255,107,53,.5)"; e.currentTarget.style.color = "rgba(255,255,255,.8)"; }}
@@ -2818,23 +2837,23 @@ export default function CinematicCosmos() {
       )}
 
       {/* ═══ HERO ═══ */}
-      {heroOp > 0.01 && <div style={{ ...S.overlay, flexDirection: "column", justifyContent: "center", alignItems: "center", opacity: heroOp }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 24, opacity: heroReady ? 1 : 0, transition: "opacity .8s ease .3s" }}>
-          <div style={{ width: 36, height: 1, background: "linear-gradient(90deg,transparent,#FF6B35)" }} />
-          <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, letterSpacing: ".25em", textTransform: "uppercase", color: "rgba(255,255,255,.3)" }}>Fullstack Developer · Builder · Seeker</span>
-          <div style={{ width: 36, height: 1, background: "linear-gradient(90deg,#FF6B35,transparent)" }} />
+      {heroOp > 0.01 && <div style={{ ...S.overlay, flexDirection: "column", justifyContent: "center", alignItems: "center", opacity: heroOp, padding: isMobile ? "0 16px" : 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 8 : 14, marginBottom: isMobile ? 16 : 24, opacity: heroReady ? 1 : 0, transition: "opacity .8s ease .3s" }}>
+          <div style={{ width: isMobile ? 20 : 36, height: 1, background: "linear-gradient(90deg,transparent,#FF6B35)" }} />
+          <span style={{ fontFamily: "'DM Mono',monospace", fontSize: isMobile ? 8 : 10, letterSpacing: ".25em", textTransform: "uppercase", color: "rgba(255,255,255,.3)", textAlign: "center" }}>Fullstack Developer · Builder · Seeker</span>
+          <div style={{ width: isMobile ? 20 : 36, height: 1, background: "linear-gradient(90deg,#FF6B35,transparent)" }} />
         </div>
-        <h1 style={{ fontFamily: "'Bodoni Moda',serif", fontWeight: 900, fontSize: "min(13vw,130px)", lineHeight: .9, letterSpacing: "-.04em", textAlign: "center", color: "#fff", textShadow: "0 0 80px rgba(255,107,53,.15), 0 0 160px rgba(255,107,53,.06)", opacity: heroReady ? 1 : 0, transform: heroReady ? "translateY(0)" : "translateY(50px)", transition: "all 1s cubic-bezier(.16,1,.3,1) .15s" }}>Atharva</h1>
-        <p style={{ fontFamily: "'Cormorant Garamond',serif", fontWeight: 300, fontStyle: "italic", fontSize: "min(3.5vw,24px)", color: "rgba(255,255,255,.25)", marginTop: 16, opacity: heroReady ? 1 : 0, transition: "opacity 1s ease .5s" }}>crafting intelligent systems</p>
-        <div style={{ position: "absolute", bottom: 40, display: "flex", flexDirection: "column", alignItems: "center", gap: 8, opacity: heroReady ? 1 : 0, transition: "opacity 1s ease 1s" }}>
-          <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, letterSpacing: ".3em", textTransform: "uppercase", color: "rgba(255,255,255,.13)" }}>Scroll to fly</span>
+        <h1 style={{ fontFamily: "'Bodoni Moda',serif", fontWeight: 900, fontSize: isMobile ? "min(16vw,72px)" : "min(13vw,130px)", lineHeight: .9, letterSpacing: "-.04em", textAlign: "center", color: "#fff", textShadow: "0 0 80px rgba(255,107,53,.15), 0 0 160px rgba(255,107,53,.06)", opacity: heroReady ? 1 : 0, transform: heroReady ? "translateY(0)" : "translateY(50px)", transition: "all 1s cubic-bezier(.16,1,.3,1) .15s" }}>Atharva</h1>
+        <p style={{ fontFamily: "'Cormorant Garamond',serif", fontWeight: 300, fontStyle: "italic", fontSize: isMobile ? "min(4.5vw,18px)" : "min(3.5vw,24px)", color: "rgba(255,255,255,.25)", marginTop: isMobile ? 10 : 16, opacity: heroReady ? 1 : 0, transition: "opacity 1s ease .5s" }}>crafting intelligent systems</p>
+        <div style={{ position: "absolute", bottom: isMobile ? 60 : 40, display: "flex", flexDirection: "column", alignItems: "center", gap: 8, opacity: heroReady ? 1 : 0, transition: "opacity 1s ease 1s" }}>
+          <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, letterSpacing: ".3em", textTransform: "uppercase", color: "rgba(255,255,255,.13)" }}>{isMobile ? "Swipe to fly" : "Scroll to fly"}</span>
           <div style={{ width: 1, height: 28, background: "linear-gradient(to bottom,rgba(255,107,53,.35),transparent)", animation: "pulse 2s ease-in-out infinite" }} />
         </div>
       </div>}
 
       {/* ═══ ABOUT ═══ */}
       {aboutOp > 0.01 && <div style={{ ...S.overlay, alignItems: "center", justifyContent: "center", opacity: aboutOp }}>
-        <div style={{ maxWidth: 520, padding: "0 28px", transform: `translateY(${(1 - aboutOp) * 25}px)` }}>
+        <div style={{ maxWidth: 520, padding: isMobile ? "0 20px" : "0 28px", transform: `translateY(${(1 - aboutOp) * 25}px)` }}>
           <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, letterSpacing: ".22em", textTransform: "uppercase", color: "#FF6B35", marginBottom: 20, opacity: .7 }}>[SYS.ABOUT]</div>
           <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "min(3.2vw,24px)", fontWeight: 400, lineHeight: 1.65, color: "rgba(255,255,255,.72)" }}>
             I build software that carries a philosophy within it. Currently at{" "}
@@ -2845,8 +2864,8 @@ export default function CinematicCosmos() {
       </div>}
 
       {/* ═══ EDUCATION ═══ */}
-      {eduOp > 0.01 && <div style={{ ...S.overlay, alignItems: "center", opacity: eduOp, padding: "0 6%" }}>
-        <div style={{ maxWidth: 460, transform: `translateX(${(1 - eduOp) * -35}px)` }}>
+      {eduOp > 0.01 && <div style={{ ...S.overlay, alignItems: "center", justifyContent: isMobile ? "center" : "flex-start", opacity: eduOp, padding: isMobile ? "0 20px" : "0 6%" }}>
+        <div style={{ maxWidth: isMobile ? "100%" : 460, transform: isMobile ? `translateY(${(1 - eduOp) * 25}px)` : `translateX(${(1 - eduOp) * -35}px)` }}>
           <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, letterSpacing: ".22em", textTransform: "uppercase", color: "#B0A0FF", marginBottom: 14, opacity: .7 }}>[SYS.PATHWAYS]</div>
           <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "min(6vw,42px)", fontWeight: 300, color: activeEdu.color, opacity: .2, lineHeight: 1, marginBottom: 4 }}>
             {activeEdu.sanskrit}
@@ -2877,8 +2896,8 @@ export default function CinematicCosmos() {
       </div>}
 
       {/* ═══ SKILLS ═══ */}
-      {skillsOp > 0.01 && SKILLS_LAYOUT_MODE === "atlas" && <div style={{ ...S.overlay, alignItems: "center", opacity: skillsOp, padding: "0 6%" }}>
-          <div style={{ maxWidth: 460, transform: `translateX(${(1 - skillsOp) * -35}px)` }}>
+      {skillsOp > 0.01 && SKILLS_LAYOUT_MODE === "atlas" && <div style={{ ...S.overlay, alignItems: "center", justifyContent: isMobile ? "center" : "flex-start", opacity: skillsOp, padding: isMobile ? "0 20px" : "0 6%" }}>
+          <div style={{ maxWidth: isMobile ? "100%" : 460, transform: isMobile ? `translateY(${(1 - skillsOp) * 25}px)` : `translateX(${(1 - skillsOp) * -35}px)` }}>
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "min(6vw,42px)", fontWeight: 300, color: activeSkill.color, opacity: .2, lineHeight: 1, marginBottom: 4 }}>
               {activeSkill.sanskrit}
             </div>
@@ -2969,8 +2988,8 @@ export default function CinematicCosmos() {
       {EXPERIENCES.map((exp, i) => {
         if (expOps[i] <= 0.01) return null;
         return (
-          <div key={`exp-${exp.company}`} style={{ ...S.overlay, alignItems: "center", opacity: expOps[i], padding: "0 6%" }}>
-            <div style={{ maxWidth: 460, transform: `translateX(${(1 - expOps[i]) * -35}px)` }}>
+          <div key={`exp-${exp.company}`} style={{ ...S.overlay, alignItems: "center", justifyContent: isMobile ? "center" : "flex-start", opacity: expOps[i], padding: isMobile ? "0 20px" : "0 6%" }}>
+            <div style={{ maxWidth: isMobile ? "100%" : 460, transform: isMobile ? `translateY(${(1 - expOps[i]) * 25}px)` : `translateX(${(1 - expOps[i]) * -35}px)` }}>
               <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, letterSpacing: ".2em", textTransform: "uppercase", color: exp.color, opacity: .7, marginBottom: 10 }}>
                 {exp.timeframe}{exp.ongoing ? " · in flight" : ""}
               </div>
@@ -2990,8 +3009,8 @@ export default function CinematicCosmos() {
         if (projOps[i] <= 0.01) return null;
         const proj = slot.project;
         return (
-          <div key={`${slot.planet.key}-${proj.title}`} style={{ ...S.overlay, alignItems: "center", opacity: projOps[i], padding: "0 6%" }}>
-            <div style={{ maxWidth: 460, transform: `translateX(${(1 - projOps[i]) * -35}px)` }}>
+          <div key={`${slot.planet.key}-${proj.title}`} style={{ ...S.overlay, alignItems: "center", justifyContent: isMobile ? "center" : "flex-start", opacity: projOps[i], padding: isMobile ? "0 20px" : "0 6%" }}>
+            <div style={{ maxWidth: isMobile ? "100%" : 460, transform: isMobile ? `translateY(${(1 - projOps[i]) * 25}px)` : `translateX(${(1 - projOps[i]) * -35}px)` }}>
               <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "min(6vw,42px)", fontWeight: 300, color: slot.color, opacity: .2, lineHeight: 1, marginBottom: 4 }}>{proj.glyph}</div>
               <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, letterSpacing: ".2em", textTransform: "uppercase", color: slot.color, opacity: .7, marginBottom: 10 }}>
                 {slot.planet.label} · {slot.planet.sanskrit} · {proj.sub}
@@ -3010,10 +3029,10 @@ export default function CinematicCosmos() {
       })}
 
       {/* ═══ CONTACT ═══ */}
-      {contactOp > 0.01 && <div style={{ ...S.overlay, flexDirection: "column", alignItems: "center", justifyContent: "center", pointerEvents: contactOp > .5 ? "auto" : "none", opacity: contactOp }}>
-        <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, letterSpacing: ".3em", textTransform: "uppercase", color: "rgba(255,255,255,.18)", marginBottom: 20 }}>[SIGNAL.TRANSMIT]</div>
-        <h2 style={{ fontFamily: "'Bodoni Moda',serif", fontWeight: 700, fontSize: "min(6vw,50px)", textAlign: "center", lineHeight: 1.15, marginBottom: 14, background: "linear-gradient(135deg,#FF6B35,#FFD93D,#00E5A0)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Let&#39;s build something<br />extraordinary</h2>
-        <p style={{ fontFamily: "'Cormorant Garamond',serif", fontStyle: "italic", fontSize: 16, color: "rgba(255,255,255,.22)", marginBottom: 32, textAlign: "center" }}>Open to conversations about AI, infrastructure & ambitious projects</p>
+      {contactOp > 0.01 && <div style={{ ...S.overlay, flexDirection: "column", alignItems: "center", justifyContent: "center", pointerEvents: contactOp > .5 ? "auto" : "none", opacity: contactOp, padding: isMobile ? "0 20px" : 0 }}>
+        <div style={{ fontFamily: "'DM Mono',monospace", fontSize: isMobile ? 9 : 10, letterSpacing: ".3em", textTransform: "uppercase", color: "rgba(255,255,255,.18)", marginBottom: 20 }}>[SIGNAL.TRANSMIT]</div>
+        <h2 style={{ fontFamily: "'Bodoni Moda',serif", fontWeight: 700, fontSize: isMobile ? "min(8vw,36px)" : "min(6vw,50px)", textAlign: "center", lineHeight: 1.15, marginBottom: 14, background: "linear-gradient(135deg,#FF6B35,#FFD93D,#00E5A0)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Let&#39;s build something<br />extraordinary</h2>
+        <p style={{ fontFamily: "'Cormorant Garamond',serif", fontStyle: "italic", fontSize: isMobile ? 14 : 16, color: "rgba(255,255,255,.22)", marginBottom: 32, textAlign: "center" }}>Open to conversations about AI, infrastructure & ambitious projects</p>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
           {["GitHub ↗", "Twitter ↗", "Email →"].map(l => (
             <a key={l} href="#" onClick={e => e.preventDefault()} style={{ padding: "9px 20px", borderRadius: 2, border: "1px solid rgba(255,255,255,.08)", fontFamily: "'DM Mono',monospace", fontSize: 11, color: "rgba(255,255,255,.4)", textDecoration: "none", transition: "all .3s ease" }}
@@ -3025,43 +3044,46 @@ export default function CinematicCosmos() {
       </div>}
 
       {/* ═══ FIXED UI ═══ */}
-      <div style={{ position: "absolute", top: 20, left: 22, zIndex: 20, fontFamily: "'Bodoni Moda',serif", fontSize: 17, fontWeight: 700, color: "rgba(255,255,255,.4)", opacity: ui.loaded ? 1 : 0, transition: "opacity .8s ease .3s" }}>A.</div>
+      <div style={{ position: "absolute", top: isMobile ? 14 : 20, left: isMobile ? 14 : 22, zIndex: 20, fontFamily: "'Bodoni Moda',serif", fontSize: isMobile ? 15 : 17, fontWeight: 700, color: "rgba(255,255,255,.4)", opacity: ui.loaded ? 1 : 0, transition: "opacity .8s ease .3s" }}>A.</div>
 
       {/* Mini-map toggle */}
       <div
         onClick={(e) => { e.stopPropagation(); setMiniMapOpen(!miniMapOpen); }}
         style={{
-          position: "absolute", top: 20, left: 52, zIndex: 20,
+          position: "absolute", top: isMobile ? 10 : 20, left: isMobile ? 40 : 52, zIndex: 20,
           fontFamily: "'DM Mono',monospace", fontSize: 13,
           color: miniMapOpen ? "rgba(255,255,255,.5)" : "rgba(255,255,255,.2)",
           cursor: "pointer", pointerEvents: "auto",
           opacity: ui.loaded ? 1 : 0, transition: "opacity .8s ease .3s, color .3s ease",
+          padding: isMobile ? 8 : 0,
         }}
-      ><svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 3.5L5 1.5L9 3.5L13 1.5V10.5L9 12.5L5 10.5L1 12.5V3.5Z" stroke="currentColor" strokeWidth="0.9" strokeLinejoin="round"/><line x1="5" y1="1.5" x2="5" y2="10.5" stroke="currentColor" strokeWidth="0.7" opacity="0.4"/><line x1="9" y1="3.5" x2="9" y2="12.5" stroke="currentColor" strokeWidth="0.7" opacity="0.4"/></svg></div>
+      ><svg width={isMobile ? 18 : 14} height={isMobile ? 18 : 14} viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 3.5L5 1.5L9 3.5L13 1.5V10.5L9 12.5L5 10.5L1 12.5V3.5Z" stroke="currentColor" strokeWidth="0.9" strokeLinejoin="round"/><line x1="5" y1="1.5" x2="5" y2="10.5" stroke="currentColor" strokeWidth="0.7" opacity="0.4"/><line x1="9" y1="3.5" x2="9" y2="12.5" stroke="currentColor" strokeWidth="0.7" opacity="0.4"/></svg></div>
 
       {/* Cinematic mode toggle */}
       <div
         onClick={(e) => { e.stopPropagation(); toggleCinematic(); }}
         style={{
-          position: "absolute", top: 20, left: 74, zIndex: 20,
+          position: "absolute", top: isMobile ? 10 : 20, left: isMobile ? 74 : 74, zIndex: 20,
           color: cinematicActive ? "#FF6B35" : "rgba(255,255,255,.2)",
           cursor: "pointer", pointerEvents: "auto",
           opacity: ui.loaded ? 1 : 0, transition: "opacity .8s ease .3s, color .3s ease",
+          padding: isMobile ? 8 : 0,
         }}
         title={cinematicActive ? "Stop cinematic" : "Cinematic mode"}
-      ><svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">{cinematicActive ? <><rect x="3" y="2" width="3" height="10" rx="0.5" fill="currentColor"/><rect x="8" y="2" width="3" height="10" rx="0.5" fill="currentColor"/></> : <path d="M3 1.5L12 7L3 12.5V1.5Z" fill="currentColor"/>}</svg></div>
+      ><svg width={isMobile ? 18 : 14} height={isMobile ? 18 : 14} viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">{cinematicActive ? <><rect x="3" y="2" width="3" height="10" rx="0.5" fill="currentColor"/><rect x="8" y="2" width="3" height="10" rx="0.5" fill="currentColor"/></> : <path d="M3 1.5L12 7L3 12.5V1.5Z" fill="currentColor"/>}</svg></div>
 
       {/* Music toggle */}
       <div
         onClick={(e) => { e.stopPropagation(); toggleMusic(); }}
         style={{
-          position: "absolute", top: 20, left: 96, zIndex: 20,
+          position: "absolute", top: isMobile ? 10 : 20, left: isMobile ? 108 : 96, zIndex: 20,
           color: musicPlaying ? "#00E5A0" : "rgba(255,255,255,.2)",
           cursor: "pointer", pointerEvents: "auto",
           opacity: ui.loaded ? 1 : 0, transition: "opacity .8s ease .3s, color .3s ease",
+          padding: isMobile ? 8 : 0,
         }}
         title={musicPlaying ? "Mute" : "Play ambient music"}
-      ><svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">{musicPlaying ? <><path d="M1 5H3L6 2V12L3 9H1V5Z" fill="currentColor"/><path d="M9 4.5C10.2 5.3 10.8 6.5 10.8 7C10.8 7.5 10.2 8.7 9 9.5" stroke="currentColor" strokeWidth="0.9" strokeLinecap="round"/><path d="M10.5 2.8C12.3 4 13.2 5.8 13.2 7C13.2 8.2 12.3 10 10.5 11.2" stroke="currentColor" strokeWidth="0.9" strokeLinecap="round"/></> : <><path d="M1 5H3L6 2V12L3 9H1V5Z" fill="currentColor" opacity="0.5"/><line x1="9" y1="4" x2="13" y2="10" stroke="currentColor" strokeWidth="0.9" strokeLinecap="round"/><line x1="13" y1="4" x2="9" y2="10" stroke="currentColor" strokeWidth="0.9" strokeLinecap="round"/></>}</svg></div>
+      ><svg width={isMobile ? 18 : 14} height={isMobile ? 18 : 14} viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">{musicPlaying ? <><path d="M1 5H3L6 2V12L3 9H1V5Z" fill="currentColor"/><path d="M9 4.5C10.2 5.3 10.8 6.5 10.8 7C10.8 7.5 10.2 8.7 9 9.5" stroke="currentColor" strokeWidth="0.9" strokeLinecap="round"/><path d="M10.5 2.8C12.3 4 13.2 5.8 13.2 7C13.2 8.2 12.3 10 10.5 11.2" stroke="currentColor" strokeWidth="0.9" strokeLinecap="round"/></> : <><path d="M1 5H3L6 2V12L3 9H1V5Z" fill="currentColor" opacity="0.5"/><line x1="9" y1="4" x2="13" y2="10" stroke="currentColor" strokeWidth="0.9" strokeLinecap="round"/><line x1="13" y1="4" x2="9" y2="10" stroke="currentColor" strokeWidth="0.9" strokeLinecap="round"/></>}</svg></div>
 
       {/* Cinematic mode overlay bar */}
       {cinematicActive && (
@@ -3084,9 +3106,9 @@ export default function CinematicCosmos() {
             style={{ position: "absolute", inset: 0, zIndex: 20 }}
           />
           <div style={{
-            position: "absolute", top: 40, left: 22, zIndex: 21,
+            position: "absolute", top: isMobile ? 50 : 40, left: isMobile ? 14 : 22, zIndex: 21,
             background: "rgba(2,4,11,.88)", border: "1px solid rgba(255,255,255,.06)",
-            borderRadius: 4, padding: "10px 14px", maxWidth: 180,
+            borderRadius: 4, padding: isMobile ? "12px 16px" : "10px 14px", maxWidth: 180,
             backdropFilter: "blur(8px)", pointerEvents: "auto",
           }}>
             {[
@@ -3115,9 +3137,9 @@ export default function CinematicCosmos() {
                     setMiniMapOpen(false);
                   }}
                   style={{
-                    fontFamily: "'DM Mono',monospace", fontSize: 10, letterSpacing: ".12em",
+                    fontFamily: "'DM Mono',monospace", fontSize: isMobile ? 12 : 10, letterSpacing: ".12em",
                     color: isActive ? sec.color : "rgba(255,255,255,.3)",
-                    padding: "5px 0", cursor: "pointer",
+                    padding: isMobile ? "8px 0" : "5px 0", cursor: "pointer",
                     borderLeft: `2px solid ${isActive ? sec.color : "transparent"}`,
                     paddingLeft: 8,
                     transition: "color .2s ease, border-color .2s ease",
@@ -3132,27 +3154,27 @@ export default function CinematicCosmos() {
       )}
 
       {/* Progress */}
-      <div style={{ position: "absolute", right: 18, top: "50%", transform: "translateY(-50%)", zIndex: 20, display: "flex", flexDirection: "column", alignItems: "center" }}>
-        <div style={{ width: 2, height: 90, background: "rgba(255,255,255,.03)", borderRadius: 1, position: "relative", overflow: "hidden" }}>
+      <div style={{ position: "absolute", right: isMobile ? 10 : 18, top: "50%", transform: "translateY(-50%)", zIndex: 20, display: "flex", flexDirection: "column", alignItems: "center" }}>
+        <div style={{ width: 2, height: isMobile ? 60 : 90, background: "rgba(255,255,255,.03)", borderRadius: 1, position: "relative", overflow: "hidden" }}>
           <div style={{ position: "absolute", top: 0, left: 0, width: "100%", height: `${p * 100}%`, background: "linear-gradient(to bottom,#FF6B35,#00E5A0)", borderRadius: 1 }} />
         </div>
         <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: "rgba(255,255,255,.1)", marginTop: 5 }}>{Math.round(p * 100)}%</span>
       </div>
 
-      <div style={{ position: "absolute", bottom: 18, left: 22, zIndex: 20, fontFamily: "'DM Mono',monospace", fontSize: 9, letterSpacing: ".12em", color: "rgba(255,255,255,.08)" }}>[ {SECTIONS[ui.section]} ]</div>
+      <div style={{ position: "absolute", bottom: isMobile ? 14 : 18, left: isMobile ? 14 : 22, zIndex: 20, fontFamily: "'DM Mono',monospace", fontSize: isMobile ? 8 : 9, letterSpacing: ".12em", color: "rgba(255,255,255,.08)" }}>[ {SECTIONS[ui.section]} ]</div>
 
-      {ui.loaded && (
+      {ui.loaded && !isMobile && (
         <div style={{ position: "absolute", bottom: 6, left: 22, zIndex: 20, fontFamily: "'DM Mono',monospace", fontSize: 8, letterSpacing: ".1em", display: "flex", gap: 6 }}>
           <span style={{ color: "rgba(255,255,255,.06)" }}>LOCAL.SOL</span>
           <span style={{ color: "rgba(255,255,255,.08)" }}>{clockTime}</span>
         </div>
       )}
 
-      <div style={{ position: "absolute", left: "50%", bottom: 16, transform: "translateX(-50%)", zIndex: 20, display: "flex", gap: 5 }}>
-        {SECTIONS.map((_, i) => <div key={i} style={{ width: ui.section === i ? 14 : 4, height: 3, borderRadius: 2, transition: "all .4s cubic-bezier(.16,1,.3,1)", background: ui.section === i ? "linear-gradient(90deg,#FF6B35,#00E5A0)" : "rgba(255,255,255,.05)" }} />)}
+      <div style={{ position: "absolute", left: "50%", bottom: isMobile ? 10 : 16, transform: "translateX(-50%)", zIndex: 20, display: "flex", gap: isMobile ? 3 : 5 }}>
+        {SECTIONS.map((_, i) => <div key={i} style={{ width: ui.section === i ? (isMobile ? 10 : 14) : (isMobile ? 3 : 4), height: 3, borderRadius: 2, transition: "all .4s cubic-bezier(.16,1,.3,1)", background: ui.section === i ? "linear-gradient(90deg,#FF6B35,#00E5A0)" : "rgba(255,255,255,.05)" }} />)}
       </div>
 
-      <div style={{ position: "absolute", bottom: 18, right: 40, zIndex: 20, fontFamily: "'Cormorant Garamond',serif", fontSize: 13, fontStyle: "italic", color: activeSolar ? `${activeSolar.color}90` : activeExp ? `${activeExp.color}A6` : activeSkillSignal ? `${activeSkillSignal.color}A6` : (ui.section === 2 && activeEdu) ? `${activeEdu.color}A6` : "rgba(255,255,255,.08)" }}>
+      <div style={{ position: "absolute", bottom: isMobile ? 14 : 18, right: isMobile ? 14 : 40, zIndex: 20, fontFamily: "'Cormorant Garamond',serif", fontSize: isMobile ? 10 : 13, fontStyle: "italic", color: activeSolar ? `${activeSolar.color}90` : activeExp ? `${activeExp.color}A6` : activeSkillSignal ? `${activeSkillSignal.color}A6` : (ui.section === 2 && activeEdu) ? `${activeEdu.color}A6` : "rgba(255,255,255,.08)", maxWidth: isMobile ? "40%" : "none", textAlign: "right" }}>
         {activeSolar
           ? `${activeSolar.planet.sanskrit} · ${activeSolar.planet.philosophy}`
           : activeExp
@@ -3175,8 +3197,8 @@ export default function CinematicCosmos() {
             onMouseLeave={() => setOrbHovered(false)}
             onClick={() => setChatOpen(true)}
             style={{
-              position: "absolute", top: 18, right: 22, zIndex: 20,
-              display: "flex", alignItems: "center", gap: 10,
+              position: "absolute", top: isMobile ? 10 : 18, right: isMobile ? 10 : 22, zIndex: 20,
+              display: "flex", alignItems: "center", gap: isMobile ? 6 : 10,
               opacity: ui.loaded ? 1 : 0, transition: "opacity .8s ease .3s",
               cursor: "pointer",
             }}
