@@ -370,7 +370,6 @@ const starFragSrc = `
     col = mix(col, cool, smoothstep(0.72, 1.0, vTemp));
     col = mix(col, vec3(1.0), core * 0.7);
 
-    if (airy < 0.002) discard;
     gl_FragColor = vec4(col * airy, airy);
   }
 `;
@@ -604,7 +603,6 @@ const accretionDiskFragSrc = `
     vec3 col = mix(uColorA, uColorB, radialT);
     col = mix(col, vec3(1.0), heat * 0.15 * (1.0 - radialT));
     float alpha = ring * (0.03 + uFocus * 0.18) * (0.6 + heat * 0.4);
-    if (alpha < 0.002) discard;
     gl_FragColor = vec4(col, alpha);
   }
 `;
@@ -633,17 +631,27 @@ const massTransferFragSrc = `
 /* ═══════════════════════════════════════
    TEXTURE HELPERS
    ═══════════════════════════════════════ */
+const _glowCache = new Map<string, THREE.CanvasTexture>();
 function makeGlow(color: string, sz: number): THREE.CanvasTexture {
+  const key = `${color}|${sz}`;
+  const cached = _glowCache.get(key);
+  if (cached) return cached;
   const c = document.createElement("canvas"); c.width = sz; c.height = sz;
   const x = c.getContext("2d")!, h = sz / 2;
   const g = x.createRadialGradient(h, h, 0, h, h, h);
   g.addColorStop(0, color); g.addColorStop(0.15, color + "AA");
   g.addColorStop(0.4, color + "33"); g.addColorStop(0.7, color + "0D"); g.addColorStop(1, "transparent");
   x.fillStyle = g; x.fillRect(0, 0, sz, sz);
-  return new THREE.CanvasTexture(c);
+  const tex = new THREE.CanvasTexture(c);
+  _glowCache.set(key, tex);
+  return tex;
 }
 
+const _glintCache = new Map<string, THREE.CanvasTexture>();
 function makeStarGlint(color: string, sz: number): THREE.CanvasTexture {
+  const key = `${color}|${sz}`;
+  const cached = _glintCache.get(key);
+  if (cached) return cached;
   const c = document.createElement("canvas"); c.width = sz; c.height = sz;
   const x = c.getContext("2d")!;
   const h = sz / 2;
@@ -667,7 +675,9 @@ function makeStarGlint(color: string, sz: number): THREE.CanvasTexture {
   x.beginPath(); x.moveTo(h * 1.64, h * 0.36); x.lineTo(h * 0.36, h * 1.64); x.stroke();
   x.globalCompositeOperation = "source-over";
 
-  return new THREE.CanvasTexture(c);
+  const tex = new THREE.CanvasTexture(c);
+  _glintCache.set(key, tex);
+  return tex;
 }
 
 function makeNebula(color: string, sz: number): THREE.CanvasTexture {
@@ -913,6 +923,7 @@ export default function CinematicCosmos() {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(W, H);
     renderer.setClearColor(0x02040b);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.autoClear = false;
     ct.appendChild(renderer.domElement);
 
@@ -951,11 +962,11 @@ export default function CinematicCosmos() {
     const mainTarget = new THREE.WebGLRenderTarget(W, H, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat, type: THREE.HalfFloatType });
     const bloomRes = { w: Math.floor(W / 2), h: Math.floor(H / 2) };
     const bloomRes2 = { w: Math.floor(W / 4), h: Math.floor(H / 4) };
-    const brightTarget = new THREE.WebGLRenderTarget(bloomRes.w, bloomRes.h, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
-    const pingTarget = new THREE.WebGLRenderTarget(bloomRes.w, bloomRes.h, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
-    const pongTarget = new THREE.WebGLRenderTarget(bloomRes.w, bloomRes.h, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
-    const ping2 = new THREE.WebGLRenderTarget(bloomRes2.w, bloomRes2.h, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
-    const pong2 = new THREE.WebGLRenderTarget(bloomRes2.w, bloomRes2.h, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
+    const brightTarget = new THREE.WebGLRenderTarget(bloomRes.w, bloomRes.h, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, type: THREE.HalfFloatType });
+    const pingTarget = new THREE.WebGLRenderTarget(bloomRes.w, bloomRes.h, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, type: THREE.HalfFloatType });
+    const pongTarget = new THREE.WebGLRenderTarget(bloomRes.w, bloomRes.h, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, type: THREE.HalfFloatType });
+    const ping2 = new THREE.WebGLRenderTarget(bloomRes2.w, bloomRes2.h, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, type: THREE.HalfFloatType });
+    const pong2 = new THREE.WebGLRenderTarget(bloomRes2.w, bloomRes2.h, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, type: THREE.HalfFloatType });
 
     const orthoCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
     const quadGeo = new THREE.PlaneGeometry(2, 2);
@@ -1215,7 +1226,7 @@ export default function CinematicCosmos() {
       const auraBase = spread * 3.9;
       aura.scale.set(auraBase, auraBase, 1);
       grp.add(aura);
-      const light = new THREE.PointLight(accent.clone().lerp(new THREE.Color("#FFFFFF"), 0.22), 0, spread * 11.5, 2.1);
+      const light = new THREE.PointLight(accent.clone().lerp(new THREE.Color("#FFFFFF"), 0.22), 0, spread * 11.5, 2);
       light.position.set(0, 0, 0);
       grp.add(light);
 
@@ -1777,7 +1788,7 @@ export default function CinematicCosmos() {
     for (let i = 0; i < nPos.length - 1; i++) {
       const pts: THREE.Vector3[] = []; const a = nPos[i], b = nPos[i + 1];
       for (let s = 0; s <= 60; s++) { const t = s / 60; pts.push(new THREE.Vector3(lerp(a.x, b.x, t) + Math.sin(t * Math.PI * 4) * 2, lerp(a.y, b.y, t) + Math.cos(t * Math.PI * 3) * 1.5, lerp(a.z, b.z, t))); }
-      const ln = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.01, blending: THREE.AdditiveBlending }));
+      const ln = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.01, blending: THREE.AdditiveBlending, depthWrite: false }));
       scene.add(ln);
       connLines.push(ln);
     }
@@ -1854,21 +1865,27 @@ export default function CinematicCosmos() {
     /* ════════════════════════════════════
        EVENTS
        ════════════════════════════════════ */
+    let curW = W, curH = H;
     const resize = () => {
       const w = ct.clientWidth, h = ct.clientHeight;
+      curW = w; curH = h;
+      const dpr = Math.min(window.devicePixelRatio, 2);
       camera.aspect = w / h; camera.updateProjectionMatrix();
       renderer.setSize(w, h);
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-      mainTarget.setSize(w, h);
-      brightTarget.setSize(Math.floor(w / 2), Math.floor(h / 2));
-      pingTarget.setSize(Math.floor(w / 2), Math.floor(h / 2));
-      pongTarget.setSize(Math.floor(w / 2), Math.floor(h / 2));
-      ping2.setSize(Math.floor(w / 4), Math.floor(h / 4));
-      pong2.setSize(Math.floor(w / 4), Math.floor(h / 4));
-      blurMatH.uniforms.resolution.value.set(Math.floor(w / 2), Math.floor(h / 2));
-      blurMatV.uniforms.resolution.value.set(Math.floor(w / 2), Math.floor(h / 2));
-      blurMat2H.uniforms.resolution.value.set(Math.floor(w / 4), Math.floor(h / 4));
-      blurMat2V.uniforms.resolution.value.set(Math.floor(w / 4), Math.floor(h / 4));
+      renderer.setPixelRatio(dpr);
+      const pw = Math.floor(w * dpr), ph = Math.floor(h * dpr);
+      mainTarget.setSize(pw, ph);
+      const bw = Math.floor(pw / 2), bh = Math.floor(ph / 2);
+      const bw2 = Math.floor(pw / 4), bh2 = Math.floor(ph / 4);
+      brightTarget.setSize(bw, bh);
+      pingTarget.setSize(bw, bh);
+      pongTarget.setSize(bw, bh);
+      ping2.setSize(bw2, bh2);
+      pong2.setSize(bw2, bh2);
+      blurMatH.uniforms.resolution.value.set(bw, bh);
+      blurMatV.uniforms.resolution.value.set(bw, bh);
+      blurMat2H.uniforms.resolution.value.set(bw2, bh2);
+      blurMat2V.uniforms.resolution.value.set(bw2, bh2);
     };
     window.addEventListener("resize", resize);
 
@@ -1924,8 +1941,11 @@ export default function CinematicCosmos() {
        ════════════════════════════════════ */
     const clock = new THREE.Clock();
     let raf: number;
+    let prevSec = -1; let prevProgress = -1;
     const animate = () => {
       raf = requestAnimationFrame(animate);
+      const dt = Math.min(clock.getDelta(), 0.05); // cap to avoid spiral on tab-switch
+      const dtN = dt * 60; // normalize: 1.0 at 60fps, 2.0 at 30fps, etc.
       const elapsed = clock.getElapsedTime();
       const s = st.current;
 
@@ -1957,29 +1977,29 @@ export default function CinematicCosmos() {
         }
       }
 
-      s.progress += (s.target - s.progress) * (cin.active ? 0.09 : (mob ? 0.06 : 0.04));
+      s.progress += (s.target - s.progress) * (1 - Math.pow(1 - (cin.active ? 0.09 : (mob ? 0.06 : 0.04)), dtN));
       const p = clamp(s.progress, 0.001, 0.999);
       // On mobile without gyro, add gentle automatic camera sway for immersion
       if (mob && !hasGyro) {
         s.mouse.x = Math.sin(elapsed * 0.15) * 0.25 + Math.sin(elapsed * 0.08) * 0.15;
         s.mouse.y = Math.cos(elapsed * 0.12) * 0.15 + Math.sin(elapsed * 0.06) * 0.1;
       }
-      s.sm.x += (s.mouse.x - s.sm.x) * (mob ? 0.04 : 0.03);
-      s.sm.y += (s.mouse.y - s.sm.y) * (mob ? 0.04 : 0.03);
-      s.speed *= 0.94;
+      s.sm.x += (s.mouse.x - s.sm.x) * (1 - Math.pow(1 - (mob ? 0.04 : 0.03), dtN));
+      s.sm.y += (s.mouse.y - s.sm.y) * (1 - Math.pow(1 - (mob ? 0.04 : 0.03), dtN));
+      s.speed *= Math.pow(0.94, dtN);
 
       const cp = camPath.getPointAt(p);
       const lp = camPath.getPointAt(Math.min(0.999, p + 0.015));
 
       // 3D map fade & scroll-driven camera
       const mapActive = mapActiveRef.current;
-      if (mapActive && mapFadeRef.current < 1) mapFadeRef.current = Math.min(1, mapFadeRef.current + 0.03);
-      else if (!mapActive && mapFadeRef.current > 0) mapFadeRef.current = Math.max(0, mapFadeRef.current - 0.035);
+      if (mapActive && mapFadeRef.current < 1) mapFadeRef.current = Math.min(1, mapFadeRef.current + 0.03 * dtN);
+      else if (!mapActive && mapFadeRef.current > 0) mapFadeRef.current = Math.max(0, mapFadeRef.current - 0.035 * dtN);
       const mf = mapFadeRef.current;
 
       // Smooth the map scroll
       const ms = mapScrollRef.current;
-      ms.smooth += (ms.target - ms.smooth) * 0.06;
+      ms.smooth += (ms.target - ms.smooth) * (1 - Math.pow(1 - 0.06, dtN));
       ms.progress = ms.smooth;
 
       // Camera: path-following vs map side-view
@@ -2035,16 +2055,16 @@ export default function CinematicCosmos() {
           const hs = (8 + prox * 10) + Math.sin(bt * 0.5) * 1.5;
           wp.halo.scale.set(hs, hs, 1);
           (wp.ring.material as THREE.MeshBasicMaterial).opacity = mf * (0.03 + prox * 0.12 + Math.sin(bt * 0.7) * 0.02);
-          wp.ring.rotation.z += 0.003 + i * 0.001 + prox * 0.005;
+          wp.ring.rotation.z += (0.003 + i * 0.001 + prox * 0.005) * dtN;
           // Project to screen for HTML labels
           const proj = wp.pos.clone().project(camera);
           const el = mapLabelRefs.current[i];
           if (el) {
             // proj.z < 1 means in front of camera (NDC space)
             const inFront = proj.z < 1;
-            const sx = (proj.x * 0.5 + 0.5) * W;
-            const sy = (-proj.y * 0.5 + 0.5) * H;
-            const onScreen = inFront && sx > -200 && sx < W + 200 && sy > -200 && sy < H + 200;
+            const sx = (proj.x * 0.5 + 0.5) * curW;
+            const sy = (-proj.y * 0.5 + 0.5) * curH;
+            const onScreen = inFront && sx > -200 && sx < curW + 200 && sy > -200 && sy < curH + 200;
             el.style.transform = `translate(-50%,-50%) translate(${sx}px,${sy}px)`;
             el.style.opacity = onScreen ? String(mf * (0.3 + prox * 0.7)) : "0";
           }
@@ -2053,7 +2073,7 @@ export default function CinematicCosmos() {
         (mapFlowPts.material as THREE.PointsMaterial).opacity = mf * 0.45;
         const fAttr = mapFlowPts.geometry.attributes.position as THREE.BufferAttribute;
         for (let i = 0; i < MAP_FLOW_N; i++) {
-          mapFlowProg[i] += mapFlowSpd[i];
+          mapFlowProg[i] += mapFlowSpd[i] * dtN;
           if (mapFlowProg[i] > 0.998) mapFlowProg[i] = 0.002;
           const pt = camPath.getPointAt(mapFlowProg[i]);
           mapFlowPos[i*3] = pt.x + Math.sin(elapsed * 2 + i) * 0.25;
@@ -2083,9 +2103,9 @@ export default function CinematicCosmos() {
       nodes.forEach((n, i) => {
         const bt = elapsed + i * 1.5;
         n.grp.position.y = n.bp.y + Math.sin(bt * 0.28) * 0.45;
-        n.core.rotation.y += 0.0025 * n.spin;
+        n.core.rotation.y += 0.0025 * n.spin * dtN;
         n.core.rotation.x = Math.sin(bt * 0.12) * 0.08;
-        if (n.ring) n.ring.rotation.z += 0.0012 + n.spin * 0.0008;
+        if (n.ring) n.ring.rotation.z += (0.0012 + n.spin * 0.0008) * dtN;
         n.motes.rotation.y = bt * 0.12;
         n.motes.rotation.x = Math.sin(bt * 0.09) * 0.08;
         n.core.scale.setScalar(1 + Math.sin(bt * 0.6) * 0.04);
@@ -2212,16 +2232,16 @@ export default function CinematicCosmos() {
         // Sublimation jets: emerge from nucleus, spiral outward
         const jetAttr = comet.jets.geometry.attributes.position as THREE.BufferAttribute;
         for (let j = 0; j < comet.jetPositions.length / 3; j++) {
-          comet.jetPositions[j * 3] += comet.jetVelocities[j * 3];
-          comet.jetPositions[j * 3 + 1] += comet.jetVelocities[j * 3 + 1];
-          comet.jetPositions[j * 3 + 2] += comet.jetVelocities[j * 3 + 2];
+          comet.jetPositions[j * 3] += comet.jetVelocities[j * 3] * dtN;
+          comet.jetPositions[j * 3 + 1] += comet.jetVelocities[j * 3 + 1] * dtN;
+          comet.jetPositions[j * 3 + 2] += comet.jetVelocities[j * 3 + 2] * dtN;
           // Coriolis spiral from nucleus rotation
           const jpx = comet.jetPositions[j * 3], jpz = comet.jetPositions[j * 3 + 2];
-          comet.jetVelocities[j * 3] += -jpz * 0.0001;
-          comet.jetVelocities[j * 3 + 2] += jpx * 0.0001;
+          comet.jetVelocities[j * 3] += -jpz * 0.0001 * dtN;
+          comet.jetVelocities[j * 3 + 2] += jpx * 0.0001 * dtN;
           // Solar wind acceleration: particles accelerate in anti-sun direction
-          comet.jetVelocities[j * 3] += comet.sunDir.x * -0.00003;
-          comet.jetVelocities[j * 3 + 2] += comet.sunDir.z * -0.00003;
+          comet.jetVelocities[j * 3] += comet.sunDir.x * -0.00003 * dtN;
+          comet.jetVelocities[j * 3 + 2] += comet.sunDir.z * -0.00003 * dtN;
           const dx = comet.jetPositions[j * 3], dy = comet.jetPositions[j * 3 + 1], dz = comet.jetPositions[j * 3 + 2];
           if (dx * dx + dy * dy + dz * dz > 16) {
             comet.jetPositions[j * 3] = (Math.random() - 0.5) * 0.06;
@@ -2242,9 +2262,9 @@ export default function CinematicCosmos() {
         // Dust trail particles: heavier, slower drift
         const dustAttr = comet.dustParticles.geometry.attributes.position as THREE.BufferAttribute;
         for (let j = 0; j < comet.dustPositions.length / 3; j++) {
-          comet.dustPositions[j * 3] += comet.dustVelocities[j * 3];
-          comet.dustPositions[j * 3 + 1] += comet.dustVelocities[j * 3 + 1];
-          comet.dustPositions[j * 3 + 2] += comet.dustVelocities[j * 3 + 2];
+          comet.dustPositions[j * 3] += comet.dustVelocities[j * 3] * dtN;
+          comet.dustPositions[j * 3 + 1] += comet.dustVelocities[j * 3 + 1] * dtN;
+          comet.dustPositions[j * 3 + 2] += comet.dustVelocities[j * 3 + 2] * dtN;
           const dx = comet.dustPositions[j * 3], dy = comet.dustPositions[j * 3 + 1], dz = comet.dustPositions[j * 3 + 2];
           if (dx * dx + dy * dy + dz * dz > 25) {
             const frac = Math.random() * 0.5;
@@ -2286,11 +2306,11 @@ export default function CinematicCosmos() {
         // Ion streamer particles: fast movement along ion tail
         const ionStrAttr = comet.ionStreamers.geometry.attributes.position as THREE.BufferAttribute;
         for (let j = 0; j < comet.ionStreamerPositions.length / 3; j++) {
-          comet.ionStreamerPositions[j * 3] += comet.ionStreamerVelocities[j * 3];
-          comet.ionStreamerPositions[j * 3 + 1] += comet.ionStreamerVelocities[j * 3 + 1];
-          comet.ionStreamerPositions[j * 3 + 2] += comet.ionStreamerVelocities[j * 3 + 2];
-          comet.ionStreamerVelocities[j * 3] += comet.sunDir.x * -0.00005;
-          comet.ionStreamerVelocities[j * 3 + 2] += comet.sunDir.z * -0.00005;
+          comet.ionStreamerPositions[j * 3] += comet.ionStreamerVelocities[j * 3] * dtN;
+          comet.ionStreamerPositions[j * 3 + 1] += comet.ionStreamerVelocities[j * 3 + 1] * dtN;
+          comet.ionStreamerPositions[j * 3 + 2] += comet.ionStreamerVelocities[j * 3 + 2] * dtN;
+          comet.ionStreamerVelocities[j * 3] += comet.sunDir.x * -0.00005 * dtN;
+          comet.ionStreamerVelocities[j * 3 + 2] += comet.sunDir.z * -0.00005 * dtN;
           const isx = comet.ionStreamerPositions[j * 3], isy = comet.ionStreamerPositions[j * 3 + 1], isz = comet.ionStreamerPositions[j * 3 + 2];
           if (isx * isx + isy * isy + isz * isz > 30) {
             comet.ionStreamerPositions[j * 3] = (Math.random() - 0.5) * 0.08;
@@ -2354,7 +2374,7 @@ export default function CinematicCosmos() {
         (binaryStar.lagrangeGlow.material as THREE.SpriteMaterial).opacity = 0.05 + eduFocus * 0.15 + Math.sin(bt * 1.2) * 0.03;
 
         // Accretion disk: rotate and update uniforms
-        binaryStar.accretionDisk.rotation.z += 0.003;
+        binaryStar.accretionDisk.rotation.z += 0.003 * dtN;
         binaryStar.accretionMat.uniforms.uTime.value = elapsed;
         binaryStar.accretionMat.uniforms.uFocus.value = eduFocus;
 
@@ -2438,7 +2458,12 @@ export default function CinematicCosmos() {
       } else {
         sec = 5 + SOLAR_PROJECTS.length;
       }
-      setUi(prev => ({ ...prev, section: sec, progress: p }));
+      // Only trigger React re-render when section changes or progress shifts meaningfully
+      const pRound = Math.round(p * 1000);
+      if (sec !== prevSec || pRound !== prevProgress) {
+        prevSec = sec; prevProgress = pRound;
+        setUi(prev => ({ ...prev, section: sec, progress: p }));
+      }
     };
 
     animate();
@@ -2490,8 +2515,10 @@ export default function CinematicCosmos() {
       });
       quadGeo.dispose();
       dotTex.dispose();
-      sharedCoreGlow.dispose();
       sharedPlanetGeo.dispose();
+      // Dispose cached textures
+      _glowCache.forEach(t => t.dispose()); _glowCache.clear();
+      _glintCache.forEach(t => t.dispose()); _glintCache.clear();
 
       renderer.dispose();
       [mainTarget, brightTarget, pingTarget, pongTarget, ping2, pong2].forEach(t => t.dispose());
