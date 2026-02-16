@@ -332,14 +332,15 @@ const starVertSrc = `
   attribute float temperature;
   attribute float phase;
   uniform float uTime;
+  uniform float uMobileBoost;
   varying float vBright;
   varying float vTemp;
   void main() {
     float twinkle = 0.7 + 0.3 * sin(uTime * (1.0 + phase * 3.0) + phase * 6.2831853);
     vec4 mv = modelViewMatrix * vec4(position, 1.0);
     float depthScale = 350.0 / max(1.0, -mv.z);
-    float size = brightness * twinkle * depthScale;
-    gl_PointSize = clamp(size, 0.5, 45.0);
+    float size = brightness * twinkle * depthScale * uMobileBoost;
+    gl_PointSize = clamp(size, 0.8, 55.0);
     vBright = brightness * twinkle;
     vTemp = temperature;
     gl_Position = projectionMatrix * mv;
@@ -916,7 +917,7 @@ export default function CinematicCosmos() {
     ct.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(mob ? 60 : 65, W / H, 0.1, 800);
+    const camera = new THREE.PerspectiveCamera(mob ? 72 : 65, W / H, 0.1, 800);
     scene.fog = new THREE.FogExp2(0x02040b, 0.0065);
 
     const ambientLight = new THREE.AmbientLight(0x324268, 0.34);
@@ -1020,7 +1021,7 @@ export default function CinematicCosmos() {
     starGeo.setAttribute("temperature", new THREE.BufferAttribute(sTemp, 1));
     starGeo.setAttribute("phase", new THREE.BufferAttribute(sPhase, 1));
     const starMat = new THREE.ShaderMaterial({
-      uniforms: { uTime: { value: 0 } },
+      uniforms: { uTime: { value: 0 }, uMobileBoost: { value: mob ? 1.8 : 1.0 } },
       vertexShader: starVertSrc, fragmentShader: starFragSrc,
       transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
     });
@@ -1045,7 +1046,7 @@ export default function CinematicCosmos() {
     dustGeo.setAttribute("position", new THREE.BufferAttribute(dPos, 3));
     dustGeo.setAttribute("color", new THREE.BufferAttribute(dCol, 3));
     const dust = new THREE.Points(dustGeo, new THREE.PointsMaterial({
-      size: 1.7, map: dotTex, transparent: true, opacity: 0.18,
+      size: mob ? 2.4 : 1.7, map: dotTex, transparent: true, opacity: mob ? 0.24 : 0.18,
       vertexColors: true, blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true,
     }));
     scene.add(dust);
@@ -1060,11 +1061,11 @@ export default function CinematicCosmos() {
     const farStars = new THREE.Points(
       new THREE.BufferGeometry().setAttribute("position", new THREE.BufferAttribute(fsPos, 3)),
       new THREE.PointsMaterial({
-        size: 1.2,
+        size: mob ? 1.8 : 1.2,
         color: new THREE.Color("#A4B3D4"),
         map: dotTex,
         transparent: true,
-        opacity: 0.16,
+        opacity: mob ? 0.22 : 0.16,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
       })
@@ -1869,12 +1870,49 @@ export default function CinematicCosmos() {
     const onWheel = (e: WheelEvent) => { e.preventDefault(); if (chatOpenRef.current) return; if (cinematicRef.current.active) { cinematicRef.current.active = false; setCinematicActive(false); } if (mapActiveRef.current) { mapScrollRef.current.target += e.deltaY * 0.0003; mapScrollRef.current.target = clamp(mapScrollRef.current.target, 0, 1); return; } st.current.target += e.deltaY * 0.00012; st.current.target = clamp(st.current.target, 0, 1); st.current.speed = Math.abs(e.deltaY * 0.001); };
     ct.addEventListener("wheel", onWheel, { passive: false });
     let tY = 0;
-    const onTS = (e: TouchEvent) => { tY = e.touches[0].clientY; };
-    const onTM = (e: TouchEvent) => { e.preventDefault(); if (chatOpenRef.current) return; if (cinematicRef.current.active) { cinematicRef.current.active = false; setCinematicActive(false); } const dy = tY - e.touches[0].clientY; tY = e.touches[0].clientY; if (mapActiveRef.current) { mapScrollRef.current.target += dy * 0.0008; mapScrollRef.current.target = clamp(mapScrollRef.current.target, 0, 1); return; } st.current.target += dy * (mob ? 0.0007 : 0.0004); st.current.target = clamp(st.current.target, 0, 1); st.current.speed = Math.abs(dy * 0.002); };
+    let touchVelocity = 0;
+    let lastTouchTime = 0;
+    const onTS = (e: TouchEvent) => { tY = e.touches[0].clientY; touchVelocity = 0; lastTouchTime = performance.now(); };
+    const onTM = (e: TouchEvent) => {
+      e.preventDefault(); if (chatOpenRef.current) return;
+      if (cinematicRef.current.active) { cinematicRef.current.active = false; setCinematicActive(false); }
+      const dy = tY - e.touches[0].clientY; tY = e.touches[0].clientY;
+      const now = performance.now();
+      const dt = Math.max(1, now - lastTouchTime);
+      lastTouchTime = now;
+      touchVelocity = dy / dt; // px per ms
+      if (mapActiveRef.current) { mapScrollRef.current.target += dy * 0.0008; mapScrollRef.current.target = clamp(mapScrollRef.current.target, 0, 1); return; }
+      st.current.target += dy * (mob ? 0.0007 : 0.0004);
+      st.current.target = clamp(st.current.target, 0, 1);
+      st.current.speed = Math.abs(dy * 0.002);
+      // Feed touch X into parallax (gentle sway based on swipe position)
+      if (mob) { st.current.mouse.x = ((e.touches[0].clientX / window.innerWidth) - 0.5) * 1.2; }
+    };
+    const onTE = () => {
+      // Inertia: apply remaining velocity as momentum
+      if (mob && Math.abs(touchVelocity) > 0.1) {
+        const momentum = touchVelocity * 18; // convert to scroll delta equivalent
+        st.current.target += momentum * 0.0007;
+        st.current.target = clamp(st.current.target, 0, 1);
+        st.current.speed = Math.abs(momentum * 0.002);
+      }
+    };
     ct.addEventListener("touchstart", onTS, { passive: true });
     ct.addEventListener("touchmove", onTM, { passive: false });
+    ct.addEventListener("touchend", onTE, { passive: true });
     const onMM = (e: MouseEvent) => { st.current.mouse.x = (e.clientX / window.innerWidth - 0.5) * 2; st.current.mouse.y = -(e.clientY / window.innerHeight - 0.5) * 2; };
     window.addEventListener("mousemove", onMM);
+
+    // Device orientation for mobile camera parallax (gyroscope)
+    let hasGyro = false;
+    const onOrientation = (e: DeviceOrientationEvent) => {
+      if (e.gamma === null || e.beta === null) return;
+      hasGyro = true;
+      // gamma: left/right tilt (-90 to 90), beta: front/back tilt (-180 to 180)
+      st.current.mouse.x = clamp((e.gamma || 0) / 30, -1, 1);
+      st.current.mouse.y = clamp(-((e.beta || 0) - 60) / 40, -1, 1); // 60deg = phone held upright
+    };
+    if (mob) window.addEventListener("deviceorientation", onOrientation, true);
 
     /* ════════════════════════════════════
        ANIMATION LOOP
@@ -1914,10 +1952,15 @@ export default function CinematicCosmos() {
         }
       }
 
-      s.progress += (s.target - s.progress) * (cin.active ? 0.09 : 0.04);
+      s.progress += (s.target - s.progress) * (cin.active ? 0.09 : (mob ? 0.06 : 0.04));
       const p = clamp(s.progress, 0.001, 0.999);
-      s.sm.x += (s.mouse.x - s.sm.x) * 0.03;
-      s.sm.y += (s.mouse.y - s.sm.y) * 0.03;
+      // On mobile without gyro, add gentle automatic camera sway for immersion
+      if (mob && !hasGyro) {
+        s.mouse.x = Math.sin(elapsed * 0.15) * 0.25 + Math.sin(elapsed * 0.08) * 0.15;
+        s.mouse.y = Math.cos(elapsed * 0.12) * 0.15 + Math.sin(elapsed * 0.06) * 0.1;
+      }
+      s.sm.x += (s.mouse.x - s.sm.x) * (mob ? 0.04 : 0.03);
+      s.sm.y += (s.mouse.y - s.sm.y) * (mob ? 0.04 : 0.03);
       s.speed *= 0.94;
 
       const cp = camPath.getPointAt(p);
@@ -2405,9 +2448,11 @@ export default function CinematicCosmos() {
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", resize);
       window.removeEventListener("mousemove", onMM);
+      if (mob) window.removeEventListener("deviceorientation", onOrientation, true);
       ct.removeEventListener("wheel", onWheel);
       ct.removeEventListener("touchstart", onTS);
       ct.removeEventListener("touchmove", onTM);
+      ct.removeEventListener("touchend", onTE);
       renderer.dispose();
       [mainTarget, brightTarget, pingTarget, pongTarget, ping2, pong2].forEach(t => t.dispose());
       if (ct.contains(renderer.domElement)) ct.removeChild(renderer.domElement);
