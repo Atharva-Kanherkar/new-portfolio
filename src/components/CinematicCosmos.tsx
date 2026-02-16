@@ -909,14 +909,14 @@ export default function CinematicCosmos() {
 
     /* ── Renderer ── */
     const renderer = new THREE.WebGLRenderer({ antialias: false, alpha: false, powerPreference: mob ? "default" : "high-performance" });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, mob ? 1.5 : 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(W, H);
     renderer.setClearColor(0x02040b);
     renderer.autoClear = false;
     ct.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(65, W / H, 0.1, 800);
+    const camera = new THREE.PerspectiveCamera(mob ? 60 : 65, W / H, 0.1, 800);
     scene.fog = new THREE.FogExp2(0x02040b, 0.0065);
 
     const ambientLight = new THREE.AmbientLight(0x324268, 0.34);
@@ -948,8 +948,8 @@ export default function CinematicCosmos() {
        BLOOM PIPELINE
        ════════════════════════════════════ */
     const mainTarget = new THREE.WebGLRenderTarget(W, H, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat, type: THREE.HalfFloatType });
-    const bloomRes = { w: Math.floor(W / (mob ? 3 : 2)), h: Math.floor(H / (mob ? 3 : 2)) };
-    const bloomRes2 = { w: Math.floor(W / (mob ? 6 : 4)), h: Math.floor(H / (mob ? 6 : 4)) };
+    const bloomRes = { w: Math.floor(W / 2), h: Math.floor(H / 2) };
+    const bloomRes2 = { w: Math.floor(W / 4), h: Math.floor(H / 4) };
     const brightTarget = new THREE.WebGLRenderTarget(bloomRes.w, bloomRes.h, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
     const pingTarget = new THREE.WebGLRenderTarget(bloomRes.w, bloomRes.h, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
     const pongTarget = new THREE.WebGLRenderTarget(bloomRes.w, bloomRes.h, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
@@ -994,7 +994,7 @@ export default function CinematicCosmos() {
        ════════════════════════════════════ */
 
     /* ── Shader-based stars ── */
-    const STAR_N = mob ? 2000 : 5200;
+    const STAR_N = mob ? 3200 : 5200;
     const sPos = new Float32Array(STAR_N * 3);
     const sBright = new Float32Array(STAR_N);
     const sTemp = new Float32Array(STAR_N);
@@ -1029,7 +1029,7 @@ export default function CinematicCosmos() {
 
     /* ── Background dim dust ── */
     const dotTex = makeSoftDot(32);
-    const DUST_N = mob ? 800 : 2000;
+    const DUST_N = mob ? 1200 : 2000;
     const dPos = new Float32Array(DUST_N * 3);
     const dCol = new Float32Array(DUST_N * 3);
     const dp = [[0.4, 0.17, 0.08], [0, 0.36, 0.25], [0.12, 0.32, 0.31], [0.4, 0.34, 0.1]];
@@ -1050,7 +1050,7 @@ export default function CinematicCosmos() {
     }));
     scene.add(dust);
 
-    const FAR_STAR_N = mob ? 600 : 1800;
+    const FAR_STAR_N = mob ? 1000 : 1800;
     const fsPos = new Float32Array(FAR_STAR_N * 3);
     for (let i = 0; i < FAR_STAR_N; i++) {
       fsPos[i * 3] = (Math.random() - 0.5) * 440;
@@ -1216,7 +1216,7 @@ export default function CinematicCosmos() {
       light.position.set(0, 0, 0);
       grp.add(light);
 
-      const dN = mob ? 80 : 220;
+      const dN = mob ? 140 : 220;
       const dP = new Float32Array(dN * 3);
       for (let j = 0; j < dN; j++) {
         const a = Math.random() * Math.PI * 2;
@@ -1385,7 +1385,7 @@ export default function CinematicCosmos() {
 
       // ── SUBLIMATION JETS: gas venting from nucleus surface ──
       // When sunlit side heats up, volatiles sublimate in focused jets
-      const jetN = mob ? 30 : 80;
+      const jetN = mob ? 50 : 80;
       const jetPositions = new Float32Array(jetN * 3);
       const jetVelocities = new Float32Array(jetN * 3);
       for (let j = 0; j < jetN; j++) {
@@ -1416,7 +1416,7 @@ export default function CinematicCosmos() {
       grp.add(jets);
 
       // ── DUST TRAIL PARTICLES: larger grains in the dust tail ──
-      const dustPN = mob ? 50 : 150;
+      const dustPN = mob ? 90 : 150;
       const dustPositions = new Float32Array(dustPN * 3);
       const dustVelocities = new Float32Array(dustPN * 3);
       for (let j = 0; j < dustPN; j++) {
@@ -1482,7 +1482,7 @@ export default function CinematicCosmos() {
       grp.add(bowShock);
 
       // ── ION STREAMER PARTICLES: discrete particles moving along ion tail ──
-      const ionStreamerN = mob ? 20 : 60;
+      const ionStreamerN = mob ? 35 : 60;
       const ionStreamerPositions = new Float32Array(ionStreamerN * 3);
       const ionStreamerVelocities = new Float32Array(ionStreamerN * 3);
       for (let j = 0; j < ionStreamerN; j++) {
@@ -1661,7 +1661,7 @@ export default function CinematicCosmos() {
     bsGrp.add(lagrangeGlow);
 
     // 120 orbital dust particles
-    const bsDustN = mob ? 40 : 120;
+    const bsDustN = mob ? 80 : 120;
     const bsDustPos = new Float32Array(bsDustN * 3);
     for (let j = 0; j < bsDustN; j++) {
       const a = Math.random() * Math.PI * 2;
@@ -1745,7 +1745,7 @@ export default function CinematicCosmos() {
         map: makeGlow(slot.color, 256), transparent: true, opacity: slot.isPlaceholder ? 0.11 : 0.16, blending: THREE.AdditiveBlending, depthWrite: false,
       }));
       haze.scale.set(radius * 9.2, radius * 9.2, 1); grp.add(haze);
-      const mN = mob ? 18 : 45; const mP = new Float32Array(mN * 3);
+      const mN = mob ? 30 : 45; const mP = new Float32Array(mN * 3);
       for (let j = 0; j < mN; j++) {
         const a = (j / mN) * Math.PI * 2 + Math.random() * 0.4;
         const r = radius * 2.2 + Math.random() * (radius * 1.7);
@@ -1850,21 +1850,19 @@ export default function CinematicCosmos() {
        ════════════════════════════════════ */
     const resize = () => {
       const w = ct.clientWidth, h = ct.clientHeight;
-      const m = w < 768 || "ontouchstart" in window;
-      const bd = m ? 3 : 2, bd2 = m ? 6 : 4;
       camera.aspect = w / h; camera.updateProjectionMatrix();
       renderer.setSize(w, h);
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, m ? 1.5 : 2));
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
       mainTarget.setSize(w, h);
-      brightTarget.setSize(Math.floor(w / bd), Math.floor(h / bd));
-      pingTarget.setSize(Math.floor(w / bd), Math.floor(h / bd));
-      pongTarget.setSize(Math.floor(w / bd), Math.floor(h / bd));
-      ping2.setSize(Math.floor(w / bd2), Math.floor(h / bd2));
-      pong2.setSize(Math.floor(w / bd2), Math.floor(h / bd2));
-      blurMatH.uniforms.resolution.value.set(Math.floor(w / bd), Math.floor(h / bd));
-      blurMatV.uniforms.resolution.value.set(Math.floor(w / bd), Math.floor(h / bd));
-      blurMat2H.uniforms.resolution.value.set(Math.floor(w / bd2), Math.floor(h / bd2));
-      blurMat2V.uniforms.resolution.value.set(Math.floor(w / bd2), Math.floor(h / bd2));
+      brightTarget.setSize(Math.floor(w / 2), Math.floor(h / 2));
+      pingTarget.setSize(Math.floor(w / 2), Math.floor(h / 2));
+      pongTarget.setSize(Math.floor(w / 2), Math.floor(h / 2));
+      ping2.setSize(Math.floor(w / 4), Math.floor(h / 4));
+      pong2.setSize(Math.floor(w / 4), Math.floor(h / 4));
+      blurMatH.uniforms.resolution.value.set(Math.floor(w / 2), Math.floor(h / 2));
+      blurMatV.uniforms.resolution.value.set(Math.floor(w / 2), Math.floor(h / 2));
+      blurMat2H.uniforms.resolution.value.set(Math.floor(w / 4), Math.floor(h / 4));
+      blurMat2V.uniforms.resolution.value.set(Math.floor(w / 4), Math.floor(h / 4));
     };
     window.addEventListener("resize", resize);
 
@@ -2043,10 +2041,10 @@ export default function CinematicCosmos() {
         n.motes.rotation.y = bt * 0.12;
         n.motes.rotation.x = Math.sin(bt * 0.09) * 0.08;
         n.core.scale.setScalar(1 + Math.sin(bt * 0.6) * 0.04);
-        n.atmosphere.material.opacity = 0.34 + Math.sin(bt * 0.45) * 0.1;
-        const gs = n.haloBase + Math.sin(bt * 0.36) * (n.haloBase * 0.12);
+        n.atmosphere.material.opacity = (0.34 + Math.sin(bt * 0.45) * 0.1) * (mob ? 1.3 : 1);
+        const gs = n.haloBase * (mob ? 1.15 : 1) + Math.sin(bt * 0.36) * (n.haloBase * 0.12);
         n.atmosphere.scale.set(gs, gs, 1);
-        n.haze.material.opacity = 0.13 + Math.sin(bt * 0.35) * 0.03;
+        n.haze.material.opacity = (0.13 + Math.sin(bt * 0.35) * 0.03) * (mob ? 1.3 : 1);
       });
 
       const skillsBandT = clamp((p - SKILLS_START) / Math.max(0.0001, EXPERIENCE_START - SKILLS_START), 0, 1);
@@ -2089,23 +2087,24 @@ export default function CinematicCosmos() {
           star.anchor.position.y = star.base.y + Math.cos(wobble * 0.95) * star.jitter * 0.8;
           star.anchor.position.z = star.base.z + Math.sin(wobble * 0.74) * star.jitter * 0.9;
 
+          const sm = mob ? 1.3 : 1; // mobile scale/opacity boost
           const pulse = 0.86 + Math.sin(bt * 2.4 + star.twinkle) * 0.18 + focus * 0.34;
 
           // Core: tight bright point, pulses intensity
           const coreMat = star.core.material as THREE.SpriteMaterial;
-          coreMat.opacity = (0.55 + focus * 0.4 + Math.sin(bt * 2.8 + star.twinkle) * 0.12) * star.brightness;
-          const coreSize = (0.1 + star.brightness * 0.05) * pulse;
+          coreMat.opacity = Math.min(1, (0.55 + focus * 0.4 + Math.sin(bt * 2.8 + star.twinkle) * 0.12) * star.brightness * sm);
+          const coreSize = (0.1 + star.brightness * 0.05) * pulse * sm;
           star.core.scale.set(coreSize, coreSize, 1);
 
           // Glint: diffraction spikes, scale up with focus
           const glintMat = star.glint.material as THREE.SpriteMaterial;
-          glintMat.opacity = 0.15 + focus * 0.42 + Math.sin(bt * 1.9 + star.twinkle) * 0.08;
-          const glintSize = (0.32 + focus * 0.52 + Math.sin(bt * 1.2 + star.twinkle) * 0.08) * cluster.spread * star.brightness;
+          glintMat.opacity = Math.min(1, (0.15 + focus * 0.42 + Math.sin(bt * 1.9 + star.twinkle) * 0.08) * sm);
+          const glintSize = (0.32 + focus * 0.52 + Math.sin(bt * 1.2 + star.twinkle) * 0.08) * cluster.spread * star.brightness * sm;
           star.glint.scale.set(glintSize, glintSize, 1);
 
           // Halo: wide atmospheric glow
           const haloMat = star.halo.material as THREE.SpriteMaterial;
-          haloMat.opacity = 0.04 + focus * 0.12 + Math.sin(bt * 0.7 + star.twinkle) * 0.02;
+          haloMat.opacity = (0.04 + focus * 0.12 + Math.sin(bt * 0.7 + star.twinkle) * 0.02) * sm;
           const haloSize = glintSize * 2.2;
           star.halo.scale.set(haloSize, haloSize, 1);
         });
@@ -2129,21 +2128,22 @@ export default function CinematicCosmos() {
         comet.grp.position.y = comet.bp.y + Math.cos(bt * 0.26 + i * 0.7) * 0.18;
 
         // Nucleus: tiny, intermittent (real nuclei are km-scale, invisible at distance)
+        const ms = mob ? 1.4 : 1; // mobile scale boost
         const nMat = comet.nucleus.material as THREE.SpriteMaterial;
         nMat.opacity = (0.5 + focus * 0.3 + Math.sin(bt * 3.5) * 0.12);
-        const nSize = 0.06 + focus * 0.04;
+        const nSize = (0.06 + focus * 0.04) * ms;
         comet.nucleus.scale.set(nSize, nSize, 1);
 
         // Coma: gas envelope, pulses as sublimation rate changes
         const comaMat = comet.coma.material as THREE.SpriteMaterial;
         const comaBreathing = 0.85 + Math.sin(bt * 0.8) * 0.15; // outgassing fluctuation
-        comaMat.opacity = (0.15 + focus * 0.32) * comaBreathing;
-        const comaSize = (0.8 + focus * 0.5 + Math.sin(bt * 0.6) * 0.12);
+        comaMat.opacity = (0.15 + focus * (mob ? 0.45 : 0.32)) * comaBreathing;
+        const comaSize = (0.8 + focus * 0.5 + Math.sin(bt * 0.6) * 0.12) * ms;
         comet.coma.scale.set(comaSize, comaSize, 1);
 
         // Outer coma: hydrogen cloud (huge, faint)
         const outerMat = comet.comaOuter.material as THREE.SpriteMaterial;
-        outerMat.opacity = 0.03 + focus * 0.08 + Math.sin(bt * 0.35) * 0.01;
+        outerMat.opacity = (0.03 + focus * 0.08 + Math.sin(bt * 0.35) * 0.01) * (mob ? 1.5 : 1);
         const outerSize = comaSize * 2.6;
         comet.comaOuter.scale.set(outerSize, outerSize, 1);
 
@@ -2159,7 +2159,7 @@ export default function CinematicCosmos() {
         comet.dustTailMat.uniforms.uFocus.value = focus;
 
         // Light — coma glow
-        comet.light.intensity = 0.03 + focus * 0.75 + Math.sin(bt * 1.1) * 0.05;
+        comet.light.intensity = (0.03 + focus * 0.75 + Math.sin(bt * 1.1) * 0.05) * (mob ? 1.4 : 1);
 
         // Sublimation jets: emerge from nucleus, spiral outward
         const jetAttr = comet.jets.geometry.attributes.position as THREE.BufferAttribute;
@@ -2292,14 +2292,15 @@ export default function CinematicCosmos() {
         binaryStar.lagrangeGlow.position.set((axA + axB) * 0.5, 0, (azA + azB) * 0.5);
 
         // Pulse star opacities
-        const pulseA = 0.6 + eduFocus * 0.35 + Math.sin(bt * 2.1) * 0.1;
-        const pulseB = 0.55 + eduFocus * 0.3 + Math.sin(bt * 2.5 + 1.0) * 0.1;
-        (binaryStar.starA.material as THREE.SpriteMaterial).opacity = pulseA;
-        (binaryStar.starAGlint.material as THREE.SpriteMaterial).opacity = 0.15 + eduFocus * 0.3 + Math.sin(bt * 1.8) * 0.08;
-        (binaryStar.starAHalo.material as THREE.SpriteMaterial).opacity = 0.04 + eduFocus * 0.1;
-        (binaryStar.starB.material as THREE.SpriteMaterial).opacity = pulseB;
-        (binaryStar.starBGlint.material as THREE.SpriteMaterial).opacity = 0.12 + eduFocus * 0.25 + Math.sin(bt * 2.0 + 0.5) * 0.06;
-        (binaryStar.starBHalo.material as THREE.SpriteMaterial).opacity = 0.03 + eduFocus * 0.08;
+        const bsm = mob ? 1.35 : 1; // mobile opacity boost
+        const pulseA = (0.6 + eduFocus * 0.35 + Math.sin(bt * 2.1) * 0.1) * bsm;
+        const pulseB = (0.55 + eduFocus * 0.3 + Math.sin(bt * 2.5 + 1.0) * 0.1) * bsm;
+        (binaryStar.starA.material as THREE.SpriteMaterial).opacity = Math.min(1, pulseA);
+        (binaryStar.starAGlint.material as THREE.SpriteMaterial).opacity = Math.min(1, (0.15 + eduFocus * 0.3 + Math.sin(bt * 1.8) * 0.08) * bsm);
+        (binaryStar.starAHalo.material as THREE.SpriteMaterial).opacity = (0.04 + eduFocus * 0.1) * bsm;
+        (binaryStar.starB.material as THREE.SpriteMaterial).opacity = Math.min(1, pulseB);
+        (binaryStar.starBGlint.material as THREE.SpriteMaterial).opacity = Math.min(1, (0.12 + eduFocus * 0.25 + Math.sin(bt * 2.0 + 0.5) * 0.06) * bsm);
+        (binaryStar.starBHalo.material as THREE.SpriteMaterial).opacity = (0.03 + eduFocus * 0.08) * bsm;
 
         // Lagrange glow
         (binaryStar.lagrangeGlow.material as THREE.SpriteMaterial).opacity = 0.05 + eduFocus * 0.15 + Math.sin(bt * 1.2) * 0.03;
@@ -2317,14 +2318,14 @@ export default function CinematicCosmos() {
         binaryStar.orbitDust.rotation.y = bt * 0.15;
 
         // Light intensity
-        binaryStar.light.intensity = 0.05 + eduFocus * 0.8 + Math.sin(bt * 0.9) * 0.05;
+        binaryStar.light.intensity = (0.05 + eduFocus * 0.8 + Math.sin(bt * 0.9) * 0.05) * (mob ? 1.4 : 1);
 
         // Group gentle drift
         binaryStar.grp.position.x = binaryStar.bp.x + Math.sin(bt * 0.2) * 0.3;
         binaryStar.grp.position.y = binaryStar.bp.y + Math.cos(bt * 0.28) * 0.25;
       }
 
-      compMat.uniforms.uBloomStrength.value = 1.42 + skillsBand * 0.34 + expBand * 0.2 + eduBand * 0.25;
+      compMat.uniforms.uBloomStrength.value = (mob ? 1.75 : 1.42) + skillsBand * 0.34 + expBand * 0.2 + eduBand * 0.25;
 
       /* ── RENDER PIPELINE ── */
       renderer.setRenderTarget(mainTarget);
