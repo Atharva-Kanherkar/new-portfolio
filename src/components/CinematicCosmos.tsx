@@ -443,34 +443,6 @@ const compositeFragSrc = `
   }
 `;
 
-const skillLinkVertSrc = `
-  varying vec2 vUv;
-  varying vec3 vNormal;
-  varying vec3 vViewDir;
-  void main() {
-    vUv = uv;
-    vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
-    vNormal = normalize(normalMatrix * normal);
-    vViewDir = normalize(-mvPos.xyz);
-    gl_Position = projectionMatrix * mvPos;
-  }
-`;
-
-const skillLinkFragSrc = `
-  uniform vec3 uColor;
-  uniform float uTime;
-  uniform float uFocus;
-  varying vec2 vUv;
-  varying vec3 vNormal;
-  varying vec3 vViewDir;
-  void main() {
-    float flow = 0.55 + 0.45 * sin(vUv.x * 24.0 - uTime * 2.8);
-    float fres = pow(1.0 - abs(dot(normalize(vNormal), normalize(vViewDir))), 2.5);
-    float alpha = (0.015 + uFocus * 0.22) * flow + fres * (0.02 + uFocus * 0.11);
-    vec3 color = mix(uColor, vec3(1.0), 0.34 + fres * 0.28);
-    gl_FragColor = vec4(color, alpha);
-  }
-`;
 
 const cometTailVertSrc = `
   varying vec2 vUv;
@@ -807,8 +779,8 @@ interface SkillStarRef {
 }
 
 interface SkillLinkRef {
-  mesh: THREE.Mesh;
-  mat: THREE.ShaderMaterial;
+  line: THREE.Line;
+  mat: THREE.LineBasicMaterial;
 }
 
 interface SkillClusterRef {
@@ -1152,7 +1124,7 @@ export default function CinematicCosmos() {
         anchor.add(core);
 
         // Layer 2: Diffraction glint (spikes + colored haze)
-        const glintSize = coreSize * 4.2 + brightness * 0.22;
+        const glintSize = coreSize * 1.8 + brightness * 0.08;
         const glint = new THREE.Sprite(new THREE.SpriteMaterial({
           map: starGlow,
           transparent: true,
@@ -1189,31 +1161,21 @@ export default function CinematicCosmos() {
       });
 
       const links: SkillLinkRef[] = [];
-      cluster.links.forEach(([fromIdx, toIdx], linkIdx) => {
+      cluster.links.forEach(([fromIdx, toIdx]) => {
         const from = starPositions[fromIdx];
         const to = starPositions[toIdx];
         if (!from || !to) return;
-        const ctrl = from.clone().lerp(to, 0.5);
-        ctrl.z += Math.sin((fromIdx + toIdx + idx) * 1.24) * 0.22 + (Math.random() - 0.5) * 0.18;
-        const curve = new THREE.CatmullRomCurve3([from, ctrl, to], false, "catmullrom", 0.2);
-        const linkMat = new THREE.ShaderMaterial({
-          uniforms: {
-            uColor: { value: tint.clone().lerp(new THREE.Color("#FFFFFF"), 0.15) },
-            uTime: { value: 0 },
-            uFocus: { value: 0 },
-          },
-          vertexShader: skillLinkVertSrc,
-          fragmentShader: skillLinkFragSrc,
+        const lineGeo = new THREE.BufferGeometry().setFromPoints([from, to]);
+        const linkMat = new THREE.LineBasicMaterial({
+          color: tint.clone().lerp(new THREE.Color("#FFFFFF"), 0.45),
           transparent: true,
+          opacity: 0,
           blending: THREE.AdditiveBlending,
           depthWrite: false,
         });
-        const tube = new THREE.Mesh(
-          new THREE.TubeGeometry(curve, 28, 0.004 + (linkIdx % 3) * 0.001, 5, false),
-          linkMat
-        );
-        grp.add(tube);
-        links.push({ mesh: tube, mat: linkMat });
+        const line = new THREE.Line(lineGeo, linkMat);
+        grp.add(line);
+        links.push({ line, mat: linkMat });
       });
 
       const aura = new THREE.Sprite(new THREE.SpriteMaterial({
@@ -1223,14 +1185,14 @@ export default function CinematicCosmos() {
         blending: THREE.AdditiveBlending,
         depthWrite: false,
       }));
-      const auraBase = spread * 3.9;
+      const auraBase = spread * 1.8;
       aura.scale.set(auraBase, auraBase, 1);
       grp.add(aura);
       const light = new THREE.PointLight(accent.clone().lerp(new THREE.Color("#FFFFFF"), 0.22), 0, spread * 11.5, 2);
       light.position.set(0, 0, 0);
       grp.add(light);
 
-      const dN = mob ? 140 : 220;
+      const dN = mob ? 30 : 60;
       const dP = new Float32Array(dN * 3);
       for (let j = 0; j < dN; j++) {
         const a = Math.random() * Math.PI * 2;
@@ -1244,7 +1206,7 @@ export default function CinematicCosmos() {
       const dust = new THREE.Points(
         dGeo,
         new THREE.PointsMaterial({
-          size: 0.038,
+          size: 0.022,
           map: dotTex,
           color: tint.clone(),
           transparent: true,
@@ -2134,45 +2096,44 @@ export default function CinematicCosmos() {
         cluster.grp.rotation.x = Math.cos(bt * 0.15 + i * 0.4) * 0.08;
 
         const auraMat = cluster.aura.material as THREE.SpriteMaterial;
-        auraMat.opacity = 0.06 + focus * 0.26 + Math.sin(bt * 0.82) * 0.04;
+        auraMat.opacity = 0.01 + focus * 0.06 + Math.sin(bt * 0.82) * 0.01;
         const auraScale = cluster.auraBase * (1 + Math.sin(bt * 0.66) * 0.08 + focus * 0.14);
         cluster.aura.scale.set(auraScale, auraScale, 1);
-        cluster.light.intensity = 0.08 + focus * 1.15 + Math.sin(bt * 1.1 + i) * 0.08;
+        cluster.light.intensity = 0.02 + focus * 0.3 + Math.sin(bt * 1.1 + i) * 0.02;
 
         cluster.dust.rotation.y = bt * 0.23;
         cluster.dust.rotation.x = Math.sin(bt * 0.17) * 0.2;
         const dustMat = cluster.dust.material as THREE.PointsMaterial;
-        dustMat.opacity = 0.07 + focus * 0.29;
+        dustMat.opacity = 0.03 + focus * 0.08;
 
-        cluster.links.forEach((link, linkIdx) => {
-          link.mat.uniforms.uTime.value = elapsed + linkIdx * 0.2;
-          link.mat.uniforms.uFocus.value = focus;
+        cluster.links.forEach((link) => {
+          link.mat.opacity = focus * 0.12;
         });
 
         cluster.stars.forEach((star, starIdx) => {
           const wobble = bt * 0.9 + star.twinkle + starIdx * 0.12;
-          star.anchor.position.x = star.base.x + Math.sin(wobble * 1.1) * star.jitter;
-          star.anchor.position.y = star.base.y + Math.cos(wobble * 0.95) * star.jitter * 0.8;
-          star.anchor.position.z = star.base.z + Math.sin(wobble * 0.74) * star.jitter * 0.9;
+          star.anchor.position.x = star.base.x + Math.sin(wobble * 1.1) * star.jitter * 0.3;
+          star.anchor.position.y = star.base.y + Math.cos(wobble * 0.95) * star.jitter * 0.3 * 0.8;
+          star.anchor.position.z = star.base.z + Math.sin(wobble * 0.74) * star.jitter * 0.3 * 0.9;
 
           const sm = mob ? 1.3 : 1; // mobile scale/opacity boost
-          const pulse = 0.86 + Math.sin(bt * 2.4 + star.twinkle) * 0.18 + focus * 0.34;
+          const pulse = 0.86 + Math.sin(bt * 0.8 + star.twinkle) * 0.18 + focus * 0.34;
 
           // Core: tight bright point, pulses intensity
           const coreMat = star.core.material as THREE.SpriteMaterial;
-          coreMat.opacity = Math.min(1, (0.55 + focus * 0.4 + Math.sin(bt * 2.8 + star.twinkle) * 0.12) * star.brightness * sm);
-          const coreSize = (0.1 + star.brightness * 0.05) * pulse * sm;
+          coreMat.opacity = Math.min(1, (0.3 + focus * 0.5 + Math.sin(bt * 0.9 + star.twinkle) * 0.12) * star.brightness * star.brightness * sm);
+          const coreSize = (0.06 + star.brightness * 0.08) * pulse * sm;
           star.core.scale.set(coreSize, coreSize, 1);
 
           // Glint: diffraction spikes, scale up with focus
           const glintMat = star.glint.material as THREE.SpriteMaterial;
-          glintMat.opacity = Math.min(1, (0.15 + focus * 0.42 + Math.sin(bt * 1.9 + star.twinkle) * 0.08) * sm);
-          const glintSize = (0.32 + focus * 0.52 + Math.sin(bt * 1.2 + star.twinkle) * 0.08) * cluster.spread * star.brightness * sm;
+          glintMat.opacity = Math.min(1, (0.08 + focus * 0.2 + Math.sin(bt * 0.6 + star.twinkle) * 0.02) * sm);
+          const glintSize = (0.14 + focus * 0.18 + Math.sin(bt * 0.4 + star.twinkle) * 0.02) * cluster.spread * star.brightness * sm;
           star.glint.scale.set(glintSize, glintSize, 1);
 
           // Halo: wide atmospheric glow
           const haloMat = star.halo.material as THREE.SpriteMaterial;
-          haloMat.opacity = (0.04 + focus * 0.12 + Math.sin(bt * 0.7 + star.twinkle) * 0.02) * sm;
+          haloMat.opacity = (0.02 + focus * 0.05 + Math.sin(bt * 0.3 + star.twinkle) * 0.01) * sm;
           const haloSize = glintSize * 2.2;
           star.halo.scale.set(haloSize, haloSize, 1);
         });
