@@ -386,7 +386,7 @@ const threshFragSrc = `
   void main() {
     vec4 c = texture2D(tDiffuse, vUv);
     float b = dot(c.rgb, vec3(0.299, 0.587, 0.114));
-    gl_FragColor = b > threshold ? c * smoothstep(threshold, threshold + 0.3, b) : vec4(0.0);
+    gl_FragColor = c * smoothstep(threshold, threshold + 0.3, b);
   }
 `;
 
@@ -496,7 +496,7 @@ const ionTailFragSrc = `
   varying vec3 vNormal;
   varying vec3 vViewDir;
   void main() {
-    float taper = smoothstep(0.0, 0.06, vUv.x) * (uOngoing > 0.5 ? smoothstep(1.0, 0.92, vUv.x) : smoothstep(1.0, 0.55, vUv.x));
+    float taper = smoothstep(0.0, 0.06, vUv.x) * mix(smoothstep(1.0, 0.55, vUv.x), smoothstep(1.0, 0.92, vUv.x), step(0.5, uOngoing));
     // Ion streamers: fast-moving plasma filaments
     float stream1 = 0.6 + 0.4 * sin(vUv.x * 32.0 - uTime * 6.0 + vUv.y * 8.0);
     float stream2 = 0.7 + 0.3 * sin(vUv.x * 55.0 - uTime * 8.5);
@@ -521,7 +521,7 @@ const dustTailFragSrc = `
   varying vec3 vNormal;
   varying vec3 vViewDir;
   void main() {
-    float taper = smoothstep(0.0, 0.1, vUv.x) * (uOngoing > 0.5 ? smoothstep(1.0, 0.88, vUv.x) : smoothstep(1.0, 0.45, vUv.x));
+    float taper = smoothstep(0.0, 0.1, vUv.x) * mix(smoothstep(1.0, 0.45, vUv.x), smoothstep(1.0, 0.88, vUv.x), step(0.5, uOngoing));
     // Dust is slower, more diffuse, no sharp streamers
     float drift = 0.65 + 0.35 * sin(vUv.x * 8.0 - uTime * 1.4 + vUv.y * 3.0);
     float grain = 0.8 + 0.2 * sin(vUv.x * 80.0 - uTime * 3.0 + sin(vUv.y * 20.0) * 2.0);
@@ -1101,13 +1101,17 @@ export default function CinematicCosmos() {
       return new THREE.Vector3(pt.x + lateral, pt.y + vertical, pt.z - 5.4);
     });
     const skillClusters: SkillClusterRef[] = [];
+    // Shared core glow texture for all skill stars (always white, power-of-2)
+    const sharedCoreGlow = makeGlow("#FFFFFF", 128);
     SKILL_CONSTELLATIONS.forEach((cluster, idx) => {
       const grp = new THREE.Group();
       grp.position.copy(skillPos[idx]);
       const spread = 2.2 + idx * 0.24;
       const accent = new THREE.Color(cluster.color);
       const tint = accent.clone().lerp(new THREE.Color("#FFFFFF"), 0.78);
-      const starGlow = makeStarGlint(cluster.color, 192);
+      const starGlow = makeStarGlint(cluster.color, 256);
+      // Shared halo glow per cluster (same color for all stars in this constellation)
+      const clusterHaloGlow = makeGlow(cluster.color, 128);
 
       const stars: SkillStarRef[] = [];
       const starPositions = cluster.nodes.map((node, nodeIdx) => {
@@ -1116,8 +1120,6 @@ export default function CinematicCosmos() {
         const z = (Math.random() - 0.5) * spread * 1.4 + Math.sin(nodeIdx * 1.37) * 0.28;
         return new THREE.Vector3(x, y, z);
       });
-
-      const coreGlow = makeGlow("#FFFFFF", 128);
 
       starPositions.forEach((pos, nodeIdx) => {
         const node = cluster.nodes[nodeIdx];
@@ -1128,7 +1130,7 @@ export default function CinematicCosmos() {
         // Layer 1: Tight hot-white core (pure light point)
         const coreSize = 0.12 + brightness * 0.06;
         const core = new THREE.Sprite(new THREE.SpriteMaterial({
-          map: coreGlow,
+          map: sharedCoreGlow,
           color: new THREE.Color("#FFFFFF").lerp(accent.clone(), 0.08),
           transparent: true,
           opacity: 0.85,
@@ -1153,7 +1155,7 @@ export default function CinematicCosmos() {
         // Layer 3: Wide soft halo (colored atmosphere)
         const haloSize = glintSize * 2.1;
         const halo = new THREE.Sprite(new THREE.SpriteMaterial({
-          map: makeGlow(cluster.color, 128),
+          map: clusterHaloGlow,
           transparent: true,
           opacity: 0.1,
           blending: THREE.AdditiveBlending,
@@ -1573,7 +1575,7 @@ export default function CinematicCosmos() {
     starA.scale.set(1.4, 1.4, 1);
     bsGrp.add(starA);
     const starAGlint = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: makeStarGlint("#7AC5FF", 192), transparent: true, opacity: 0.35,
+      map: makeStarGlint("#7AC5FF", 256), transparent: true, opacity: 0.35,
       blending: THREE.AdditiveBlending, depthWrite: false,
     }));
     starAGlint.scale.set(2.8, 2.8, 1);
@@ -1594,7 +1596,7 @@ export default function CinematicCosmos() {
     starB.scale.set(1.0, 1.0, 1);
     bsGrp.add(starB);
     const starBGlint = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: makeStarGlint("#FFB347", 192), transparent: true, opacity: 0.3,
+      map: makeStarGlint("#FFB347", 256), transparent: true, opacity: 0.3,
       blending: THREE.AdditiveBlending, depthWrite: false,
     }));
     starBGlint.scale.set(2.2, 2.2, 1);
@@ -1703,13 +1705,15 @@ export default function CinematicCosmos() {
       return new THREE.Vector3(pt.x + lateral, pt.y + vertical, pt.z - 2.4);
     });
     const nodes: NodeRef[] = [];
+    // Shared unit sphere geometry for all planets (scaled per-mesh)
+    const sharedPlanetGeo = new THREE.SphereGeometry(1, 48, 48);
     SOLAR_PROJECTS.forEach((slot, idx) => {
       const grp = new THREE.Group();
       grp.position.copy(nPos[idx]);
       const radius = 0.85 * slot.planet.size;
       const tex = makePlanetTexture(slot.color, mob ? 256 : 512);
       const core = new THREE.Mesh(
-        new THREE.SphereGeometry(radius, 48, 48),
+        sharedPlanetGeo,
         new THREE.MeshStandardMaterial({
           map: tex,
           roughness: 0.72,
@@ -1718,6 +1722,7 @@ export default function CinematicCosmos() {
           emissiveIntensity: 1.42,
         })
       );
+      core.scale.setScalar(radius);
       core.rotation.z = (Math.random() - 0.5) * 0.35;
       grp.add(core);
       let ring: THREE.Mesh | null = null;
@@ -1807,7 +1812,7 @@ export default function CinematicCosmos() {
     const mapWpObjs: { sprite: THREE.Sprite; halo: THREE.Sprite; ring: THREE.Mesh; pos: THREE.Vector3 }[] = [];
     mapWaypoints.forEach((wp, idx) => {
       const pos = camPath.getPointAt(Math.min(0.998, wp.t));
-      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: makeStarGlint(wp.color, 192), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: makeStarGlint(wp.color, 256), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
       sprite.position.copy(pos); sprite.scale.set(6, 6, 1); mapGrp.add(sprite);
       const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: makeGlow(wp.color, 256), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
       halo.position.copy(pos); halo.scale.set(16, 16, 1); mapGrp.add(halo);
@@ -2453,6 +2458,41 @@ export default function CinematicCosmos() {
       ct.removeEventListener("touchstart", onTS);
       ct.removeEventListener("touchmove", onTM);
       ct.removeEventListener("touchend", onTE);
+
+      // Dispose all scene objects: geometries, materials, textures
+      const disposeMat = (m: THREE.Material) => {
+        const mat = m as unknown as Record<string, unknown>;
+        ["map", "normalMap", "roughnessMap", "metalnessMap", "aoMap", "emissiveMap",
+         "displacementMap", "alphaMap", "envMap", "specularMap"].forEach(k => {
+          const tex = mat[k];
+          if (tex && tex instanceof THREE.Texture) tex.dispose();
+        });
+        m.dispose();
+      };
+      scene.traverse((obj) => {
+        if (obj instanceof THREE.Mesh || obj instanceof THREE.Points || obj instanceof THREE.Line) {
+          obj.geometry?.dispose();
+          if (Array.isArray(obj.material)) obj.material.forEach(disposeMat);
+          else if (obj.material) disposeMat(obj.material);
+        } else if (obj instanceof THREE.Sprite) {
+          if (obj.material.map) obj.material.map.dispose();
+          obj.material.dispose();
+        }
+      });
+      // Dispose bloom pipeline (separate scenes)
+      [threshScene, blurScene, compScene].forEach(s => {
+        s.traverse((obj) => {
+          if (obj instanceof THREE.Mesh) {
+            obj.geometry?.dispose();
+            if (obj.material) disposeMat(obj.material);
+          }
+        });
+      });
+      quadGeo.dispose();
+      dotTex.dispose();
+      sharedCoreGlow.dispose();
+      sharedPlanetGeo.dispose();
+
       renderer.dispose();
       [mainTarget, brightTarget, pingTarget, pongTarget, ping2, pong2].forEach(t => t.dispose());
       if (ct.contains(renderer.domElement)) ct.removeChild(renderer.domElement);
