@@ -1023,8 +1023,6 @@ export default function CinematicCosmos() {
   const chatOpenRef = useRef(false);
   useEffect(() => { chatOpenRef.current = chatOpen; }, [chatOpen]);
   const [orbHovered, setOrbHovered] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [loaderReady, setLoaderReady] = useState(false);
   const [mapShown, setMapShown] = useState(false);
   const [mapDismissed, setMapDismissed] = useState(false);
   const [miniMapOpen, setMiniMapOpen] = useState(false);
@@ -1049,6 +1047,10 @@ export default function CinematicCosmos() {
     if (!ct) return;
     const W = ct.clientWidth, H = ct.clientHeight;
     const mob = W < 768 || "ontouchstart" in window;
+    setMapShown(false);
+    setUi(u => ({ ...u, loaded: true }));
+    let mapShowTimer: number | null = null;
+    mapShowTimer = window.setTimeout(() => { setMapShown(true); }, 500);
 
     /* ── Renderer ── */
     const renderer = new THREE.WebGLRenderer({ antialias: false, alpha: false, powerPreference: mob ? "default" : "high-performance" });
@@ -2809,14 +2811,9 @@ export default function CinematicCosmos() {
     };
 
     animate();
-    setTimeout(() => { setLoaderReady(true); }, 2200);
-    setTimeout(() => {
-      setLoading(false);
-      setUi(u => ({ ...u, loaded: true }));
-      setTimeout(() => { setMapShown(true); }, 200);
-    }, 3600);
 
     return () => {
+      if (mapShowTimer !== null) window.clearTimeout(mapShowTimer);
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", resize);
       window.removeEventListener("mousemove", onMM);
@@ -3105,7 +3102,6 @@ export default function CinematicCosmos() {
   const activeSkillIdx = Math.min(SKILL_CONSTELLATIONS.length - 1, Math.round(skillsSlide));
   const activeSkill = SKILL_CONSTELLATIONS[activeSkillIdx];
   const activeSkillSignal = ui.section === 3 ? activeSkill : null;
-
   const S = { overlay: { position: "absolute" as const, inset: 0, zIndex: 10, display: "flex", pointerEvents: "none" as const } };
 
   return (
@@ -3114,9 +3110,6 @@ export default function CinematicCosmos() {
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=DM+Mono:wght@300;400;500&display=swap');
         @supports not (height: 100dvh) { .cosmos-root { height: 100vh !important; } }
         @keyframes pulse{0%,100%{opacity:.2}50%{opacity:.6}}
-        @keyframes loaderBar{from{width:0%}to{width:100%}}
-        @keyframes loaderFadeOut{0%{opacity:1}100%{opacity:0}}
-        @keyframes loaderLogoFade{from{opacity:0}to{opacity:0.6}}
         @keyframes cursorRingSpin{from{transform:translate(-50%,-50%) rotate(0deg)}to{transform:translate(-50%,-50%) rotate(360deg)}}
         @keyframes cursorPulse{0%,100%{opacity:.35;transform:translate(-50%,-50%) scale(1)}50%{opacity:.55;transform:translate(-50%,-50%) scale(1.15)}}
       `}</style>
@@ -3182,35 +3175,6 @@ export default function CinematicCosmos() {
 
       <div ref={mountRef} style={{ position: "absolute", inset: 0, zIndex: 1 }} />
 
-      {/* ═══ LOADER ═══ */}
-      {loading && (
-        <div style={{
-          position: "absolute", inset: 0, zIndex: 30, background: "#02040b",
-          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-          animation: "loaderFadeOut 0.8s cubic-bezier(.16,1,.3,1) 2.8s forwards",
-        }}>
-          <div style={{
-            fontFamily: "'Space Grotesk',sans-serif", fontSize: 32, fontWeight: 700,
-            color: "rgba(255,255,255,.6)",
-            animation: "loaderLogoFade 0.6s ease forwards",
-          }}>A.</div>
-          <div style={{
-            width: 120, height: 1, background: "rgba(255,255,255,.06)",
-            marginTop: 24, borderRadius: 1, overflow: "hidden",
-          }}>
-            <div style={{
-              height: "100%", background: "linear-gradient(90deg,#FF6B35,#00E5A0)",
-              animation: "loaderBar 2.5s cubic-bezier(.16,1,.3,1) forwards",
-              borderRadius: 1,
-            }} />
-          </div>
-          <div style={{
-            fontFamily: "'DM Mono',monospace", fontSize: 9, letterSpacing: ".2em",
-            color: "rgba(255,255,255,.12)", marginTop: 14,
-            transition: "opacity 0.3s ease",
-          }}>{loaderReady ? "ready" : "initializing cosmos..."}</div>
-        </div>
-      )}
 
       {/* ═══ Floating section labels (3D-projected) ═══ */}
       <div style={{ position: "absolute", inset: 0, zIndex: 11, pointerEvents: "none" }}>
