@@ -1,0 +1,37 @@
+---
+title: "Functional Programming in Practice"
+date: "2025-08-20"
+excerpt: "What contributing to Cats Effect taught me about effects, composition, and thinking in types."
+---
+
+I came to functional programming sideways. Not through Haskell tutorials or lambda calculus lectures, but through a pull request to Cats Effect that needed someone to benchmark a fiber scheduling change.
+
+The PR was small. The learning was not.
+
+## Effects as values
+
+The core idea in Cats Effect — and in functional effect systems generally — is that side effects are values you can compose, not actions you execute immediately. An `IO[A]` doesn't *do* anything. It *describes* something that could be done.
+
+This seems academic until you try to test it. Suddenly, your entire program is a data structure you can inspect, rewrite, and run in controlled environments. Testing goes from "mock everything" to "just run the description with different interpreters."
+
+## Types as documentation
+
+In the Typelevel ecosystem, the type signature *is* the specification. When a function returns `Resource[IO, Connection]`, it tells you three things without reading the implementation:
+
+1. It manages a lifecycle (acquisition and release)
+2. It runs in the `IO` effect
+3. You get a `Connection` out of it
+
+The types are load-bearing. They prevent entire categories of bugs — not by catching them at runtime, but by making them impossible to write.
+
+## Composition over inheritance
+
+The deepest shift in FP isn't syntax — it's the unit of abstraction. Object-oriented code organizes around *things* (classes, objects). Functional code organizes around *transformations* (functions, type classes).
+
+In practice, this means you spend less time designing class hierarchies and more time designing pipelines. Data flows through transformations. Each step is small, testable, and replaceable.
+
+## What I'm still learning
+
+I'm not a purist. I write imperative Go when the problem calls for it. I use mutable state when immutability would be performatively wasteful. But the FP lens — effects as values, types as contracts, composition as architecture — is now part of how I think about every system I build.
+
+The Typelevel community showed me that rigor and pragmatism aren't opposites. The most correct code I've worked on is also the most maintainable.

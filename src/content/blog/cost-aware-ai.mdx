@@ -1,0 +1,37 @@
+---
+title: "Cost-Aware AI: The Missing Layer"
+date: "2025-11-22"
+excerpt: "Most teams track tokens. Few track what those tokens cost against business outcomes."
+---
+
+Here's a pattern I keep seeing: a team ships an AI feature, usage grows, and three months later someone in finance asks why the infrastructure bill tripled. By then the damage is done — not because the feature was wrong, but because nobody was watching the meter.
+
+## Tokens are not costs
+
+The first mistake is treating token counts as cost metrics. A token is a unit of computation, not a unit of value. 500 tokens spent summarising a document that saves an analyst two hours is cheap. 500 tokens spent on a hallucinated response that gets discarded is expensive at any price.
+
+The real question isn't "how many tokens did we use?" but "what did we get for them?"
+
+## The observability gap
+
+We have excellent observability for traditional infrastructure. CPU, memory, latency, error rates — all well-understood, well-tooled. But LLM workloads introduce a new dimension: *semantic cost*. The cost of a response isn't just its compute footprint. It's the downstream impact of its quality.
+
+This is what drove me to build Ritam. Not another token counter, but a system that connects:
+
+- **Prompt cost** — what you spent to generate a response
+- **Prompt quality** — did the response actually serve the user's intent?
+- **Budget enforcement** — hard limits before runaway costs hit production
+
+## Budget enforcement is a feature, not a constraint
+
+Most teams treat cost limits as an afterthought — something you check in a monthly review. But real-time budget enforcement changes how you design prompts.
+
+When you know you have a ceiling, you start asking better questions: Do I need GPT-4 for this, or will a smaller model do? Can I cache this response? Is this prompt redundant?
+
+Constraints breed creativity. A cost-aware system isn't a limited system — it's a disciplined one.
+
+## What I learned
+
+Building Ritam taught me that observability isn't just about dashboards. It's about *feedback loops*. When engineers can see the cost of a prompt in real-time, they write better prompts. When product teams can see cost-per-outcome, they make better decisions about where AI adds value.
+
+The missing layer in most AI stacks isn't more models or more data. It's the ability to answer: *was that worth it?*

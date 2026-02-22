@@ -1,0 +1,41 @@
+---
+title: "On Building Memory Systems That Forget"
+date: "2025-12-10"
+excerpt: "Why modelling biological decay curves matters more than perfect recall in cognitive prosthetics."
+---
+
+The instinct when building a memory system is to make it remember everything. Every scrap of context, every interaction, every preference — stored forever, recalled instantly. But human memory doesn't work that way, and maybe our software shouldn't either.
+
+## The problem with perfect recall
+
+Most RAG systems treat memory as an append-only log. You embed everything, you retrieve the top-k results, you call it a day. But this creates a flat landscape where a conversation from six months ago has the same weight as one from this morning.
+
+Humans forget for a reason. Forgetting is compression. It's the brain's way of saying *this pattern matters more than that detail*.
+
+## Ebbinghaus was onto something
+
+Hermann Ebbinghaus mapped the forgetting curve in 1885 — the exponential decay of memory retention over time. What's fascinating isn't the decay itself, but how *repetition reshapes the curve*. Each review stretches the half-life of a memory.
+
+When I started building Mnemosyne, I wanted to model this directly:
+
+```typescript
+function decayWeight(memory: Memory, now: number): number {
+  const age = now - memory.lastAccessed;
+  const halfLife = memory.baseHalfLife * Math.pow(2, memory.reviewCount);
+  return Math.pow(0.5, age / halfLife);
+}
+```
+
+Memories that get revisited survive. Memories that don't, gracefully fade — but they're never truly gone. They just drop below the retrieval threshold.
+
+## Context-dependent recall
+
+The other thing biological memory gets right is *context sensitivity*. You don't remember everything all the time — you remember what's relevant to where you are and what you're doing.
+
+This maps naturally to vector similarity, but with an important twist: the query context should modulate *which decay curves are active*. A memory about Kubernetes might have a short half-life in a conversation about cooking, but a long one when you're debugging a deployment.
+
+## What this means for AI systems
+
+If we're building AI that works alongside humans — as prosthetics for thought, not replacements — we should model the qualities of human cognition, not just its raw capacity. Forgetting isn't a bug. It's a feature that keeps the signal-to-noise ratio high.
+
+The goal isn't total recall. The goal is *the right memory at the right time*.

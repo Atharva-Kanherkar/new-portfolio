@@ -9,12 +9,15 @@
 html,
 body {
   width: 100%;
-  height: 100%;
-  overflow: hidden;
+  min-height: 100%;
   background: #02040b;
   color: white;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Cosmos page locks scroll on its own root div; classic page scrolls normally */
+.cosmos-root {
   touch-action: none;
   overscroll-behavior: none;
   -webkit-overflow-scrolling: touch;
