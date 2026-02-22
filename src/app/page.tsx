@@ -40,26 +40,27 @@ const CinematicCosmos = dynamic(
         >
           Loading cosmos
         </span>
-        <a
-          href="/classic"
-          style={{
-            marginTop: 24,
-            fontFamily: "monospace",
-            fontSize: 11,
-            color: "rgba(255,255,255,0.18)",
-            textDecoration: "none",
-            borderBottom: "1px solid rgba(255,255,255,0.08)",
-            paddingBottom: 1,
-            transition: "color .2s, border-color .2s",
-          }}
-          onMouseEnter={e => { (e.target as HTMLElement).style.color = "#FF6B35"; (e.target as HTMLElement).style.borderColor = "#FF6B35"; }}
-          onMouseLeave={e => { (e.target as HTMLElement).style.color = "rgba(255,255,255,0.18)"; (e.target as HTMLElement).style.borderColor = "rgba(255,255,255,0.08)"; }}
-        >
-          Prefer the fast lane? View static site &rarr;
+        {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+        <a className="loader-static-link" href="/classic">
+          Prefer the fast lane? View static site &#8594;
         </a>
         <style>{`
           @keyframes cosmosLoaderSpin {
             to { transform: rotate(360deg); }
+          }
+          .loader-static-link {
+            margin-top: 24px;
+            font-family: monospace;
+            font-size: 11px;
+            color: rgba(255,255,255,0.3) !important;
+            text-decoration: underline !important;
+            cursor: pointer;
+            pointer-events: auto;
+            z-index: 10;
+            position: relative;
+          }
+          .loader-static-link:hover {
+            color: #FF6B35 !important;
           }
         `}</style>
       </div>
