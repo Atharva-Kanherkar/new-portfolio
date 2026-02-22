@@ -183,7 +183,7 @@ export default function ChatPanel({ isOpen, onClose, accentColor: ac }: ChatPane
         style={{
           position: "fixed",
           inset: 0,
-          zIndex: 49,
+          zIndex: 999,
           background: "rgba(0,0,4,0.4)",
           backdropFilter: "blur(4px)",
           opacity: isOpen ? 1 : 0,
@@ -201,7 +201,7 @@ export default function ChatPanel({ isOpen, onClose, accentColor: ac }: ChatPane
           right: 0,
           bottom: 0,
           width: "min(420px, 92vw)",
-          zIndex: 50,
+          zIndex: 1000,
           background: "rgba(0,0,4,0.85)",
           backdropFilter: "blur(20px)",
           borderLeftWidth: 1,
