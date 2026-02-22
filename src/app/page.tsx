@@ -40,27 +40,9 @@ const CinematicCosmos = dynamic(
         >
           Loading cosmos
         </span>
-        {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
-        <a className="loader-static-link" href="/classic">
-          Prefer the fast lane? View static site &#8594;
-        </a>
         <style>{`
           @keyframes cosmosLoaderSpin {
             to { transform: rotate(360deg); }
-          }
-          .loader-static-link {
-            margin-top: 24px;
-            font-family: monospace;
-            font-size: 11px;
-            color: rgba(255,255,255,0.3) !important;
-            text-decoration: underline !important;
-            cursor: pointer;
-            pointer-events: auto;
-            z-index: 10;
-            position: relative;
-          }
-          .loader-static-link:hover {
-            color: #FF6B35 !important;
           }
         `}</style>
       </div>
